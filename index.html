@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>三维转二维 · 飞书多维表格插件</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://lf3-cdn-tos.bytecdntp.com/cdn/expire-1-M/lark-base-open/1.0.10/lark-base-open.iife.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    margin: 0; padding: 16px;
+    font-size: 13px;
+    background: #fff;
+    color: #1f2329;
+  }
+  h3 { font-size: 14px; margin: 0 0 8px; font-weight: 500; }
+  .section { margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #eef0f2; }
+  .section:last-child { border-bottom: none; }
+  .hint { font-size: 11px; color: #8f959e; margin: 4px 0 8px; }
+  button {
+    background: #fff; border: 1px solid #dee0e3; padding: 6px 12px;
+    border-radius: 4px; cursor: pointer; font-size: 12px;
+    color: #1f2329;
+  }
+  button:hover { background: #f5f6f7; }
+  button.primary { background: #3370ff; color: #fff; border-color: #3370ff; }
+  button.primary:hover { background: #2860e1; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  input[type="text"], select {
+    width: 100%; padding: 5px 8px; border: 1px solid #dee0e3;
+    border-radius: 4px; font-size: 12px;
+  }
+  .row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+  .row > * { flex: 1; min-width: 80px; }
+  .row > label { flex: 0 0 60px; font-size: 12px; color: #646a73; }
+  .badge {
+    display: inline-block; padding: 2px 6px; border-radius: 3px;
+    background: #f0f2f5; font-family: Menlo, monospace; font-size: 11px;
+  }
+  #tableWrap, #outputWrap {
+    max-height: 240px; overflow: auto;
+    border: 1px solid #eef0f2; border-radius: 4px;
+  }
+  table { border-collapse: collapse; font-size: 11px; width: 100%; }
+  th, td { padding: 3px 6px; border: 1px solid #eef0f2; white-space: nowrap; max-width: 100px; overflow: hidden; text-overflow: ellipsis; }
+  th { background: #f7f8fa; position: sticky; top: 0; font-weight: 400; color: #8f959e; }
+  td[data-r] { cursor: pointer; }
+  td[data-r]:hover { background: #f5f6f7; }
+  .cell-start { background: #e1ebff !important; color: #1456f0; }
+  .cell-end { background: #d4f4e2 !important; color: #1a7f3e; }
+  .cell-range { background: #f7f8fa !important; }
+  #status {
+    margin-top: 8px; padding: 8px; border-radius: 4px;
+    background: #f7f8fa; font-size: 11px; color: #646a73;
+    min-height: 16px;
+  }
+  .status-err { background: #fff0f0 !important; color: #c64040 !important; }
+  .status-ok { background: #e8f6ea !important; color: #1a7f3e !important; }
+  .stat { font-size: 11px; color: #8f959e; }
+</style>
+</head>
+<body>
+
+<div class="section">
+  <h3>① 导入本地三维表</h3>
+  <div class="row">
+    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" style="flex: 1;" />
+    <button id="demoBtn" style="flex: 0 0 auto;">示例</button>
+  </div>
+  <div class="hint">支持 .xlsx / .xls / .csv，首个工作表</div>
+</div>
+
+<div class="section" id="previewSection" style="display:none;">
+  <h3>② 框选数据区域</h3>
+  <div class="hint">点左上角表头（如"颜色"）→ 点右下角最后一个数字</div>
+  <div class="row" style="font-size: 11px;">
+    <div style="flex: 0 0 auto;">起点 <span class="badge" id="startCell">未选</span></div>
+    <div style="flex: 0 0 auto;">终点 <span class="badge" id="endCell">未选</span></div>
+    <button id="resetSel" style="flex: 0 0 auto; font-size: 11px;">重选</button>
+  </div>
+  <div id="tableWrap"></div>
+</div>
+
+<div class="section" id="configSection" style="display:none;">
+  <h3>③ 字段映射</h3>
+  <div class="hint">把转换后的三列（行/列/值）对应到飞书表字段</div>
+  <div class="row">
+    <label>行字段</label>
+    <select id="mapRow"></select>
+  </div>
+  <div class="row">
+    <label>列字段</label>
+    <select id="mapCol"></select>
+  </div>
+  <div class="row">
+    <label>值字段</label>
+    <select id="mapVal"></select>
+  </div>
+  <div class="row" style="margin-top: 8px;">
+    <label style="flex: 0 0 auto; display: flex; align-items: center; gap: 4px;">
+      <input type="checkbox" id="skipEmpty" checked style="flex: 0 0 auto; width: auto;" /> 跳过空/零值
+    </label>
+    <label style="flex: 0 0 auto; display: flex; align-items: center; gap: 4px;">
+      <input type="checkbox" id="skipTotal" checked style="flex: 0 0 auto; width: auto;" /> 跳过合计行列
+    </label>
+  </div>
+  <button id="previewBtn" style="margin-top: 8px;">预览转换结果</button>
+</div>
+
+<div class="section" id="outputSection" style="display:none;">
+  <h3>④ 预览 & 写入 <span class="stat" id="rowCount"></span></h3>
+  <div id="outputWrap"></div>
+  <div class="row" style="margin-top: 8px;">
+    <button id="writeBtn" class="primary" style="flex: 1;">写入当前表格</button>
+    <button id="copyBtn" style="flex: 0 0 auto;">复制为 TSV</button>
+  </div>
+</div>
+
+<div id="status">就绪。请先在飞书多维表格中打开目标表，再使用本插件。</div>
+
+<script>
+(function(){
+  const { bitable } = window;
+  let rawData = [];
+  let startRC = null, endRC = null;
+  let resultData = [];
+  let fieldMetaList = [];
+
+  const $ = id => document.getElementById(id);
+  const setStatus = (msg, type) => {
+    const el = $('status');
+    el.textContent = msg;
+    el.className = type === 'err' ? 'status-err' : type === 'ok' ? 'status-ok' : '';
+  };
+
+  // ---------- Demo ----------
+  const demoData = [
+    ['颜色','色号','XS','S','M','L','XL','','总件'],
+    ['黑色','',100,300,300,300,100,'',1100],
+    ['岩石灰','',50,100,100,100,50,'',400],
+    ['冰湖绿','',50,50,50,50,50,'',250],
+    ['玄夜紫','',50,50,50,50,50,'',250],
+    ['绒蒿粉','',100,100,100,25,25,'',350],
+    ['碧川青','',50,50,50,25,25,'',200],
+    ['缅茨姆绿','',50,50,50,25,25,'',200],
+    ['','',450,700,700,575,325,'',2750]
+  ];
+
+  // ---------- Load Feishu fields ----------
+  async function loadFields() {
+    try {
+      const table = await bitable.base.getActiveTable();
+      const fields = await table.getFieldMetaList();
+      fieldMetaList = fields;
+      const opts = fields.map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('');
+      $('mapRow').innerHTML = opts;
+      $('mapCol').innerHTML = opts;
+      $('mapVal').innerHTML = opts;
+      // Auto-match
+      autoPick('mapRow', ['颜色', '色', 'color']);
+      autoPick('mapCol', ['尺码', '尺寸', 'size']);
+      autoPick('mapVal', ['数量', '件数', 'qty', 'quantity', '总件']);
+      setStatus(`已连接当前表，共 ${fields.length} 个字段`, 'ok');
+    } catch(e) {
+      setStatus('未能连接飞书表格，请确保本插件在多维表格扩展面板中打开。错误：' + e.message, 'err');
+    }
+  }
+
+  function autoPick(selectId, keywords) {
+    const sel = $(selectId);
+    for (const opt of sel.options) {
+      const name = opt.textContent.toLowerCase();
+      if (keywords.some(k => name.includes(k.toLowerCase()))) {
+        sel.value = opt.value;
+        return;
+      }
+    }
+  }
+
+  // ---------- File input ----------
+  $('fileInput').addEventListener('change', async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, {type: 'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      rawData = XLSX.utils.sheet_to_json(ws, {header: 1, defval: ''});
+      renderPreview();
+      setStatus(`已加载 ${rawData.length} 行`, 'ok');
+    } catch(err) {
+      setStatus('文件读取失败：' + err.message, 'err');
+    }
+  });
+
+  $('demoBtn').addEventListener('click', () => {
+    rawData = demoData.map(r => r.slice());
+    renderPreview();
+    setStatus('已加载示例数据');
+  });
+
+  // ---------- Preview with clickable cells ----------
+  function renderPreview() {
+    if (!rawData.length) return;
+    $('previewSection').style.display = 'block';
+    $('configSection').style.display = 'block';
+    startRC = null; endRC = null;
+    updateSelDisplay();
+
+    const maxCols = Math.max(...rawData.map(r => r.length));
+    let html = '<table><thead><tr><th></th>';
+    for (let c = 0; c < maxCols; c++) {
+      html += `<th>${colLetter(c)}</th>`;
+    }
+    html += '</tr></thead><tbody>';
+    rawData.forEach((row, r) => {
+      html += `<tr><th>${r+1}</th>`;
+      for (let c = 0; c < maxCols; c++) {
+        const v = row[c] === undefined ? '' : row[c];
+        html += `<td data-r="${r}" data-c="${c}" title="${escapeHtml(String(v))}">${escapeHtml(String(v))}</td>`;
+      }
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    $('tableWrap').innerHTML = html;
+
+    $('tableWrap').querySelectorAll('td[data-r]').forEach(td => {
+      td.addEventListener('click', onCellClick);
+    });
+  }
+
+  function onCellClick(e) {
+    const r = +e.target.dataset.r;
+    const c = +e.target.dataset.c;
+    if (!startRC) { startRC = [r, c]; }
+    else if (!endRC) {
+      if (r >= startRC[0] && c >= startRC[1]) endRC = [r, c];
+      else { endRC = startRC; startRC = [r, c]; }
+    }
+    else { startRC = [r, c]; endRC = null; }
+    highlight();
+    updateSelDisplay();
+  }
+
+  function highlight() {
+    $('tableWrap').querySelectorAll('td[data-r]').forEach(td => {
+      td.className = '';
+      const r = +td.dataset.r, c = +td.dataset.c;
+      if (startRC && r === startRC[0] && c === startRC[1]) td.classList.add('cell-start');
+      else if (endRC && r === endRC[0] && c === endRC[1]) td.classList.add('cell-end');
+      else if (startRC && endRC && r >= startRC[0] && r <= endRC[0] && c >= startRC[1] && c <= endRC[1]) {
+        td.classList.add('cell-range');
+      }
+    });
+  }
+
+  function updateSelDisplay() {
+    $('startCell').textContent = startRC ? cellRef(...startRC) : '未选';
+    $('endCell').textContent = endRC ? cellRef(...endRC) : '未选';
+  }
+
+  $('resetSel').addEventListener('click', () => {
+    startRC = null; endRC = null;
+    highlight(); updateSelDisplay();
+  });
+
+  // ---------- Convert ----------
+  $('previewBtn').addEventListener('click', () => {
+    if (!startRC || !endRC) { setStatus('请先框选数据区域', 'err'); return; }
+    const [r0, c0] = startRC, [r1, c1] = endRC;
+    const colHeaders = [];
+    for (let c = c0 + 1; c <= c1; c++) colHeaders.push(String(rawData[r0][c] ?? '').trim());
+    const rowHeaders = [];
+    for (let r = r0 + 1; r <= r1; r++) rowHeaders.push(String(rawData[r][c0] ?? '').trim());
+
+    const skipEmpty = $('skipEmpty').checked;
+    const skipTotal = $('skipTotal').checked;
+    const totalKw = ['总件','合计','总计','总数','total','sum'];
+    const isTotal = s => totalKw.some(k => String(s).toLowerCase().includes(k.toLowerCase()));
+
+    resultData = [];
+    for (let i = 0; i < rowHeaders.length; i++) {
+      const rh = rowHeaders[i]; if (!rh) continue;
+      if (skipTotal && isTotal(rh)) continue;
+      for (let j = 0; j < colHeaders.length; j++) {
+        const ch = colHeaders[j]; if (!ch) continue;
+        if (skipTotal && isTotal(ch)) continue;
+        const v = rawData[r0 + 1 + i][c0 + 1 + j];
+        if (skipEmpty && (v === '' || v === null || v === undefined || v === 0 || v === '0')) continue;
+        resultData.push([rh, ch, v]);
+      }
+    }
+    $('outputSection').style.display = 'block';
+    $('rowCount').textContent = `· ${resultData.length} 条`;
+    renderOutput();
+    setStatus(`已生成 ${resultData.length} 条记录，检查预览后点"写入当前表格"`, 'ok');
+  });
+
+  function renderOutput() {
+    let html = '<table><thead><tr><th>行</th><th>列</th><th>值</th></tr></thead><tbody>';
+    resultData.slice(0, 100).forEach(r => {
+      html += `<tr><td>${escapeHtml(String(r[0]))}</td><td>${escapeHtml(String(r[1]))}</td><td>${escapeHtml(String(r[2]))}</td></tr>`;
+    });
+    if (resultData.length > 100) html += `<tr><td colspan="3" style="text-align:center; color:#8f959e;">… 还有 ${resultData.length - 100} 条，写入时会全部处理</td></tr>`;
+    html += '</tbody></table>';
+    $('outputWrap').innerHTML = html;
+  }
+
+  // ---------- Write to Feishu ----------
+  $('writeBtn').addEventListener('click', async () => {
+    if (!resultData.length) { setStatus('没有可写入的数据', 'err'); return; }
+    const rowFieldId = $('mapRow').value;
+    const colFieldId = $('mapCol').value;
+    const valFieldId = $('mapVal').value;
+    if (!rowFieldId || !colFieldId || !valFieldId) { setStatus('请选择三个字段映射', 'err'); return; }
+
+    $('writeBtn').disabled = true;
+    try {
+      const table = await bitable.base.getActiveTable();
+      const rowField = await table.getField(rowFieldId);
+      const colField = await table.getField(colFieldId);
+      const valField = await table.getField(valFieldId);
+
+      const records = [];
+      for (const [rh, ch, v] of resultData) {
+        const fields = {};
+        fields[rowFieldId] = await toCellValue(rowField, rh);
+        fields[colFieldId] = await toCellValue(colField, ch);
+        fields[valFieldId] = await toCellValue(valField, v);
+        records.push({ fields });
+      }
+
+      // Batch: 500 per request
+      const BATCH = 500;
+      let done = 0;
+      for (let i = 0; i < records.length; i += BATCH) {
+        const chunk = records.slice(i, i + BATCH);
+        await table.addRecords(chunk);
+        done += chunk.length;
+        setStatus(`写入中 ${done}/${records.length}…`);
+      }
+      setStatus(`✓ 成功写入 ${records.length} 条记录`, 'ok');
+    } catch(e) {
+      setStatus('写入失败：' + e.message, 'err');
+    } finally {
+      $('writeBtn').disabled = false;
+    }
+  });
+
+  // Convert string to the right cell value shape based on field type
+  async function toCellValue(field, value) {
+    const type = field.type;
+    // 1=text, 2=number, 3=singleSelect, 4=multiSelect, ...
+    if (type === 2) {  // Number
+      const n = Number(value);
+      return isNaN(n) ? null : n;
+    }
+    if (type === 3 || type === 4) {  // Select
+      // 飞书选择类字段需传 { text: 'xxx' }，不存在时自动创建需要字段已开启
+      const text = String(value);
+      return type === 4 ? [{ text }] : { text };
+    }
+    // Default: text (type 1) - needs array of segments
+    return [{ type: 'text', text: String(value) }];
+  }
+
+  $('copyBtn').addEventListener('click', async () => {
+    const text = resultData.map(r => r.join('\t')).join('\n');
+    await navigator.clipboard.writeText(text);
+    setStatus('已复制为 TSV', 'ok');
+  });
+
+  // ---------- Utils ----------
+  function colLetter(n) {
+    let s = ''; n = n + 1;
+    while (n > 0) { s = String.fromCharCode(65 + (n-1) % 26) + s; n = Math.floor((n-1)/26); }
+    return s;
+  }
+  function cellRef(r, c) { return colLetter(c) + (r + 1); }
+  function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]); }
+
+  // ---------- Init ----------
+  if (window.bitable) {
+    loadFields();
+  } else {
+    // Retry – SDK 脚本可能还在加载
+    let tries = 0;
+    const timer = setInterval(() => {
+      if (window.bitable) { clearInterval(timer); loadFields(); }
+      else if (++tries > 20) { clearInterval(timer); setStatus('未检测到飞书多维表格 SDK，请在飞书多维表格扩展面板中打开本插件', 'err'); }
+    }, 300);
+  }
+})();
+</script>
+</body>
+</html>
