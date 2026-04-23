@@ -3,171 +3,111 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>三维转二维 · 飞书多维表格插件</title>
+<title>BKF 订单表转换 · 自动识别版</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script type="module">
-  // 多 CDN 回退加载飞书 Base SDK（ESM）
-  const cdnList = [
-    'https://esm.sh/@lark-base-open/js-sdk@1.0.2',
-    'https://cdn.jsdelivr.net/npm/@lark-base-open/js-sdk@1.0.2/+esm',
-    'https://unpkg.com/@lark-base-open/js-sdk@1.0.2?module'
-  ];
-  window.__sdkLog = [];
-  for (const url of cdnList) {
-    try {
-      window.__sdkLog.push('尝试 ' + url);
-      const mod = await import(url);
-      if (mod && mod.bitable) {
-        window.bitable = mod.bitable;
-        window.__sdkLoaded = true;
-        window.__sdkSource = url;
-        window.__sdkLog.push('成功 ' + url);
-        window.dispatchEvent(new CustomEvent('sdk-ready'));
-        break;
-      } else {
-        window.__sdkLog.push('加载了但没 bitable 导出 ' + url);
-      }
-    } catch (e) {
-      window.__sdkLog.push('失败 ' + url + ': ' + (e.message || e));
-    }
-  }
-  if (!window.__sdkLoaded) {
-    window.__sdkError = window.__sdkLog.join('\n');
-    window.dispatchEvent(new CustomEvent('sdk-error'));
-  }
-</script>
 <style>
   * { box-sizing: border-box; }
   body {
     font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
-    margin: 0; padding: 16px;
-    font-size: 13px;
-    background: #fff;
+    margin: 0; padding: 24px;
+    max-width: 960px; margin: 0 auto;
+    font-size: 14px;
     color: #1f2329;
+    background: #f7f8fa;
   }
-  h3 { font-size: 14px; margin: 0 0 8px; font-weight: 500; }
-  .section { margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #eef0f2; }
-  .section:last-child { border-bottom: none; }
-  .hint { font-size: 11px; color: #8f959e; margin: 4px 0 8px; }
+  .card {
+    background: #fff;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 16px;
+    border: 1px solid #eef0f2;
+  }
+  h1 { font-size: 20px; margin: 0 0 8px; font-weight: 500; }
+  h2 { font-size: 15px; margin: 0 0 10px; font-weight: 500; }
+  .subtitle { color: #8f959e; font-size: 13px; margin-bottom: 20px; }
+  .hint { font-size: 12px; color: #8f959e; margin: 4px 0; }
   button {
-    background: #fff; border: 1px solid #dee0e3; padding: 6px 12px;
-    border-radius: 4px; cursor: pointer; font-size: 12px;
-    color: #1f2329;
+    background: #fff; border: 1px solid #dee0e3; padding: 6px 14px;
+    border-radius: 4px; cursor: pointer; font-size: 13px;
   }
   button:hover { background: #f5f6f7; }
   button.primary { background: #3370ff; color: #fff; border-color: #3370ff; }
   button.primary:hover { background: #2860e1; }
-  button:disabled { opacity: 0.5; cursor: not-allowed; }
-  input[type="text"], select {
-    width: 100%; padding: 5px 8px; border: 1px solid #dee0e3;
-    border-radius: 4px; font-size: 12px;
+  button.copy-big {
+    font-size: 14px; padding: 10px 24px;
+    background: #3370ff; color: #fff; border-color: #3370ff;
   }
-  .row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
-  .row > * { flex: 1; min-width: 80px; }
-  .row > label { flex: 0 0 60px; font-size: 12px; color: #646a73; }
-  .badge {
-    display: inline-block; padding: 2px 6px; border-radius: 3px;
-    background: #f0f2f5; font-family: Menlo, monospace; font-size: 11px;
+  .meta-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 12px 0;
   }
-  #tableWrap, #outputWrap {
-    max-height: 240px; overflow: auto;
-    border: 1px solid #eef0f2; border-radius: 4px;
+  .meta-item {
+    background: #f7f8fa; padding: 10px 12px; border-radius: 4px;
   }
-  table { border-collapse: collapse; font-size: 11px; width: 100%; }
-  th, td { padding: 3px 6px; border: 1px solid #eef0f2; white-space: nowrap; max-width: 100px; overflow: hidden; text-overflow: ellipsis; }
-  th { background: #f7f8fa; position: sticky; top: 0; font-weight: 400; color: #8f959e; }
-  td[data-r] { cursor: pointer; }
-  td[data-r]:hover { background: #f5f6f7; }
-  .cell-start { background: #e1ebff !important; color: #1456f0; }
-  .cell-end { background: #d4f4e2 !important; color: #1a7f3e; }
-  .cell-range { background: #f7f8fa !important; }
+  .meta-label { font-size: 11px; color: #8f959e; margin-bottom: 2px; }
+  .meta-value { font-size: 14px; font-weight: 500; color: #1f2329; }
+  .meta-empty { color: #c64040; font-weight: 400; font-size: 12px; }
+  #tableWrap { max-height: 400px; overflow: auto; border: 1px solid #eef0f2; border-radius: 4px; }
+  table { border-collapse: collapse; font-size: 12px; width: 100%; }
+  th, td { padding: 6px 10px; border: 1px solid #eef0f2; text-align: left; }
+  th { background: #f7f8fa; position: sticky; top: 0; font-weight: 500; color: #646a73; }
   #status {
-    margin-top: 8px; padding: 8px; border-radius: 4px;
-    background: #f7f8fa; font-size: 11px; color: #646a73;
-    min-height: 16px;
+    padding: 10px 14px; border-radius: 4px;
+    background: #f0f2f5; font-size: 12px; color: #646a73;
   }
   .status-err { background: #fff0f0 !important; color: #c64040 !important; }
   .status-ok { background: #e8f6ea !important; color: #1a7f3e !important; }
-  .stat { font-size: 11px; color: #8f959e; }
+  .export-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+  .paste-hint {
+    background: #f0f7ff; border: 1px solid #d1e3fd;
+    border-radius: 4px; padding: 10px 12px; font-size: 12px;
+    color: #1456f0; margin-top: 10px; line-height: 1.6;
+  }
+  .warning {
+    background: #fff7e6; border: 1px solid #ffd591; border-radius: 4px;
+    padding: 10px 12px; font-size: 12px; color: #8a5a00; margin-top: 8px;
+  }
 </style>
 </head>
 <body>
  
-<div id="sdkBanner" style="margin: 0 0 14px; padding: 10px 12px; border-radius: 4px; background: #fff4e5; color: #8a5a00; font-size: 12px; border: 1px solid #ffd591;">
-  <strong>飞书连接状态：</strong><span id="sdkStatus">启动中…</span>
-  <details id="sdkDetails" style="margin-top: 6px; display: none;">
-    <summary style="cursor: pointer; font-size: 11px;">查看详细日志</summary>
-    <pre id="sdkLog" style="font-size: 10px; white-space: pre-wrap; margin: 6px 0 0; color: #646a73;"></pre>
-  </details>
+<h1>BKF 订单表 → 飞书多维表格</h1>
+<p class="subtitle">上传一个订单表 xlsx，自动提取所有字段，展开成飞书能直接粘贴的格式</p>
+ 
+<div class="card">
+  <h2>① 上传订单表</h2>
+  <div class="hint" style="margin-bottom: 10px;">固定模板：款式号在 B2，日期在 J2，颜色×尺码矩阵从 D3 开始</div>
+  <input type="file" id="fileInput" accept=".xlsx,.xls" />
 </div>
  
-<div class="section">
-  <h3>① 导入本地三维表</h3>
-  <div class="row">
-    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" style="flex: 1;" />
-    <button id="demoBtn" style="flex: 0 0 auto;">示例</button>
-  </div>
-  <div class="hint">支持 .xlsx / .xls / .csv，首个工作表</div>
+<div class="card" id="metaCard" style="display:none;">
+  <h2>② 识别结果</h2>
+  <div class="meta-grid" id="metaGrid"></div>
+  <div id="warnings"></div>
 </div>
  
-<div class="section" id="previewSection" style="display:none;">
-  <h3>② 框选数据区域</h3>
-  <div class="hint">点左上角表头（如"颜色"）→ 点右下角最后一个数字</div>
-  <div class="row" style="font-size: 11px;">
-    <div style="flex: 0 0 auto;">起点 <span class="badge" id="startCell">未选</span></div>
-    <div style="flex: 0 0 auto;">终点 <span class="badge" id="endCell">未选</span></div>
-    <button id="resetSel" style="flex: 0 0 auto; font-size: 11px;">重选</button>
-  </div>
+<div class="card" id="previewCard" style="display:none;">
+  <h2>③ 展开后的记录 <span id="rowCount" style="font-size: 12px; color: #8f959e; font-weight: 400;"></span></h2>
   <div id="tableWrap"></div>
-</div>
- 
-<div class="section" id="configSection" style="display:none;">
-  <h3>③ 字段映射</h3>
-  <div class="hint">把转换后的三列（行/列/值）对应到飞书表字段</div>
-  <div class="row">
-    <label>行字段</label>
-    <select id="mapRow"></select>
+  <div class="export-actions">
+    <button id="copyBtn" class="copy-big">📋 一键复制（含表头）</button>
+    <button id="copyNoHeaderBtn">复制不含表头</button>
+    <button id="csvBtn">下载 CSV</button>
+    <button id="xlsxBtn">下载 Excel</button>
   </div>
-  <div class="row">
-    <label>列字段</label>
-    <select id="mapCol"></select>
-  </div>
-  <div class="row">
-    <label>值字段</label>
-    <select id="mapVal"></select>
-  </div>
-  <div class="row" style="margin-top: 8px;">
-    <label style="flex: 0 0 auto; display: flex; align-items: center; gap: 4px;">
-      <input type="checkbox" id="skipEmpty" checked style="flex: 0 0 auto; width: auto;" /> 跳过空/零值
-    </label>
-    <label style="flex: 0 0 auto; display: flex; align-items: center; gap: 4px;">
-      <input type="checkbox" id="skipTotal" checked style="flex: 0 0 auto; width: auto;" /> 跳过合计行列
-    </label>
-  </div>
-  <button id="previewBtn" style="margin-top: 8px;">预览转换结果</button>
-</div>
- 
-<div class="section" id="outputSection" style="display:none;">
-  <h3>④ 预览 & 写入 <span class="stat" id="rowCount"></span></h3>
-  <div id="outputWrap"></div>
-  <div class="row" style="margin-top: 8px;">
-    <button id="writeBtn" class="primary" style="flex: 1;">写入当前表格</button>
-    <button id="copyBtn" style="flex: 0 0 auto;">复制为 TSV</button>
+  <div class="paste-hint">
+    <strong>贴回飞书步骤：</strong><br>
+    ① 打开飞书多维表格 → 定位到空白行的第一个单元格<br>
+    ② Ctrl/Cmd+V 粘贴 → 飞书会自动识别各字段<br>
+    ③ 检查订单编号、日期等字段是否正确
   </div>
 </div>
  
-<div id="status">就绪。请先在飞书多维表格中打开目标表，再使用本插件。</div>
-<div style="margin-top: 8px;">
-  <button id="reloadBtn" style="font-size: 11px;">↻ 重新连接飞书表格</button>
-</div>
+<div id="status">请上传订单表 xlsx 文件</div>
  
 <script>
 (function(){
-  const { bitable } = window;
-  let rawData = [];
-  let startRC = null, endRC = null;
   let resultData = [];
-  let fieldMetaList = [];
+  let headerRow = ['订单编号', '款式', '品类', '颜色', '尺码', '件数', '日期'];
  
   const $ = id => document.getElementById(id);
   const setStatus = (msg, type) => {
@@ -175,329 +115,186 @@
     el.textContent = msg;
     el.className = type === 'err' ? 'status-err' : type === 'ok' ? 'status-ok' : '';
   };
-  const setSdkStatus = (msg, type) => {
-    const banner = $('sdkBanner');
-    const st = $('sdkStatus');
-    st.textContent = msg;
-    if (type === 'ok') {
-      banner.style.background = '#e8f6ea';
-      banner.style.color = '#1a7f3e';
-      banner.style.border = '1px solid #95d5a6';
-    } else if (type === 'err') {
-      banner.style.background = '#fff0f0';
-      banner.style.color = '#c64040';
-      banner.style.border = '1px solid #ffa7a7';
-      $('sdkDetails').style.display = 'block';
-    } else {
-      banner.style.background = '#fff4e5';
-      banner.style.color = '#8a5a00';
-      banner.style.border = '1px solid #ffd591';
-    }
-    if (window.__sdkLog) $('sdkLog').textContent = window.__sdkLog.join('\n');
-  };
  
-  // ---------- Demo ----------
-  const demoData = [
-    ['颜色','色号','XS','S','M','L','XL','','总件'],
-    ['黑色','',100,300,300,300,100,'',1100],
-    ['岩石灰','',50,100,100,100,50,'',400],
-    ['冰湖绿','',50,50,50,50,50,'',250],
-    ['玄夜紫','',50,50,50,50,50,'',250],
-    ['绒蒿粉','',100,100,100,25,25,'',350],
-    ['碧川青','',50,50,50,25,25,'',200],
-    ['缅茨姆绿','',50,50,50,25,25,'',200],
-    ['','',450,700,700,575,325,'',2750]
-  ];
- 
-  // ---------- Load Feishu fields ----------
-  async function loadFields() {
-    setSdkStatus('连接表格中…');
-    try {
-      if (!window.bitable) {
-        setSdkStatus('SDK 未加载（window.bitable 不存在）', 'err');
-        return;
-      }
-      if (!window.bitable.base) {
-        setSdkStatus('SDK 结构异常（bitable.base 不存在）', 'err');
-        return;
-      }
-      const table = await window.bitable.base.getActiveTable();
-      if (!table) {
-        setSdkStatus('未获取到当前表，请在多维表格里先选中一张表再打开插件', 'err');
-        return;
-      }
-      const tableName = await table.getName().catch(()=>'未知');
-      const fields = await table.getFieldMetaList();
-      if (!fields || fields.length === 0) {
-        setSdkStatus(`已连接表「${tableName}」但字段数为 0`, 'err');
-        return;
-      }
-      fieldMetaList = fields;
-      const opts = fields.map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('');
-      $('mapRow').innerHTML = opts;
-      $('mapCol').innerHTML = opts;
-      $('mapVal').innerHTML = opts;
-      autoPick('mapRow', ['颜色', '色', 'color']);
-      autoPick('mapCol', ['尺码', '尺寸', 'size']);
-      autoPick('mapVal', ['数量', '件数', 'qty', 'quantity', '总件']);
-      setSdkStatus(`✓ 已连接表「${tableName}」，共 ${fields.length} 个字段`, 'ok');
-    } catch(e) {
-      setSdkStatus('连接失败：' + (e.message || String(e)), 'err');
-      console.error(e);
-    }
+  // Excel 日期序列号 → YYYY-MM-DD
+  function excelDateToStr(serial) {
+    if (typeof serial !== 'number' || isNaN(serial)) return String(serial);
+    // Excel base: 1899-12-30
+    const ms = (serial - 25569) * 86400 * 1000;
+    const d = new Date(ms);
+    if (isNaN(d.getTime())) return String(serial);
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
   }
  
-  function autoPick(selectId, keywords) {
-    const sel = $(selectId);
-    for (const opt of sel.options) {
-      const name = opt.textContent.toLowerCase();
-      if (keywords.some(k => name.includes(k.toLowerCase()))) {
-        sel.value = opt.value;
-        return;
+  // 从 "BKF - 马甲 - 1" 解析出 "BKF马甲" 和序号 "1"
+  function parseOrderTitle(raw) {
+    const s = String(raw || '').trim();
+    const parts = s.split(/\s*-\s*/);
+    if (parts.length >= 2) {
+      const last = parts[parts.length - 1].trim();
+      // 末尾是否为纯数字序号
+      if (/^\d+$/.test(last)) {
+        const category = parts.slice(0, -1).map(p => p.trim()).join('');
+        return { category, seq: last };
       }
     }
+    return { category: s.replace(/\s*-\s*/g, ''), seq: '' };
   }
  
-  // ---------- File input ----------
   $('fileInput').addEventListener('change', async e => {
     const file = e.target.files[0];
     if (!file) return;
     try {
       const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, {type: 'array'});
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      rawData = XLSX.utils.sheet_to_json(ws, {header: 1, defval: ''});
-      renderPreview();
-      setStatus(`已加载 ${rawData.length} 行`, 'ok');
-    } catch(err) {
-      setStatus('文件读取失败：' + err.message, 'err');
-    }
-  });
+      const wb = XLSX.read(buf, {type: 'array', cellDates: false});
+      // 默认读第一个 sheet，或找叫"订单"的
+      let sheetName = wb.SheetNames[0];
+      if (wb.SheetNames.includes('订单')) sheetName = '订单';
+      const ws = wb.Sheets[sheetName];
  
-  $('demoBtn').addEventListener('click', () => {
-    rawData = demoData.map(r => r.slice());
-    renderPreview();
-    setStatus('已加载示例数据');
-  });
+      // 读取指定单元格
+      const getCell = ref => {
+        const c = ws[ref];
+        return c ? c.v : undefined;
+      };
  
-  // ---------- Preview with clickable cells ----------
-  function renderPreview() {
-    if (!rawData.length) return;
-    $('previewSection').style.display = 'block';
-    $('configSection').style.display = 'block';
-    startRC = null; endRC = null;
-    updateSelDisplay();
+      // 提取公共字段
+      const title = getCell('A1');                      // "BKF - 马甲 - 1"
+      const styleNo = getCell('B2');                    // 2607
+      const brand = getCell('D2');                      // 品牌（可能空）
+      const totalQty = getCell('H2');                   // 1440
+      const dateRaw = getCell('J2');                    // 46099
+      const dateStr = excelDateToStr(dateRaw);
+      const { category, seq } = parseOrderTitle(title);
+      const orderNo = seq ? `${styleNo}-${seq}` : String(styleNo || '');
  
-    const maxCols = Math.max(...rawData.map(r => r.length));
-    let html = '<table><thead><tr><th></th>';
-    for (let c = 0; c < maxCols; c++) {
-      html += `<th>${colLetter(c)}</th>`;
-    }
-    html += '</tr></thead><tbody>';
-    rawData.forEach((row, r) => {
-      html += `<tr><th>${r+1}</th>`;
-      for (let c = 0; c < maxCols; c++) {
-        const v = row[c] === undefined ? '' : row[c];
-        html += `<td data-r="${r}" data-c="${c}" title="${escapeHtml(String(v))}">${escapeHtml(String(v))}</td>`;
+      // 提取尺码表头（E3~J3，可能延伸）
+      const sizes = [];
+      const sizeCols = ['E', 'F', 'G', 'H', 'I', 'J'];
+      for (const col of sizeCols) {
+        const v = getCell(col + '3');
+        if (v) sizes.push({col, size: String(v).trim()});
       }
+ 
+      // 提取颜色行（D4 向下找，直到 D 列为空或遇到"码总数"）
+      const colors = [];
+      for (let r = 4; r <= 13; r++) {
+        const v = getCell('D' + r);
+        if (!v) continue;
+        const s = String(v).trim();
+        if (!s || s.includes('码总数') || s.includes('合计') || s.includes('总数')) break;
+        colors.push({row: r, color: s});
+      }
+ 
+      // 展开矩阵
+      resultData = [];
+      for (const {row, color} of colors) {
+        for (const {col, size} of sizes) {
+          const qty = getCell(col + row);
+          if (qty === undefined || qty === null || qty === '' || qty === 0) continue;
+          resultData.push([orderNo, String(styleNo||''), category, color, size, qty, dateStr]);
+        }
+      }
+ 
+      // 渲染元信息卡
+      const metaGrid = $('metaGrid');
+      const mkItem = (label, value, warn) => {
+        const empty = value === undefined || value === null || value === '';
+        return `<div class="meta-item">
+          <div class="meta-label">${label}</div>
+          <div class="meta-value ${empty ? 'meta-empty' : ''}">${empty ? '(未提取到)' : value}</div>
+        </div>`;
+      };
+      metaGrid.innerHTML =
+        mkItem('订单编号', orderNo) +
+        mkItem('款式号', styleNo) +
+        mkItem('品类', category) +
+        mkItem('日期', dateStr) +
+        mkItem('总件数', totalQty) +
+        mkItem('颜色数', colors.length) +
+        mkItem('尺码数', sizes.length) +
+        mkItem('展开行数', resultData.length);
+ 
+      // 警告
+      const warns = [];
+      if (!styleNo) warns.push('款式号（B2）为空');
+      if (!title) warns.push('订单标题（A1）为空');
+      if (!sizes.length) warns.push('未识别到尺码表头（E3~J3）');
+      if (!colors.length) warns.push('未识别到颜色行（D4 向下）');
+      if (totalQty && resultData.length) {
+        const sum = resultData.reduce((a, r) => a + (Number(r[5]) || 0), 0);
+        if (sum !== totalQty) warns.push(`展开后件数合计 ${sum}，与 H2 的总件数 ${totalQty} 不一致，请核对是否有空值或异常值`);
+      }
+      $('warnings').innerHTML = warns.length ? `<div class="warning">⚠ ${warns.join('；')}</div>` : '';
+ 
+      $('metaCard').style.display = 'block';
+      $('previewCard').style.display = 'block';
+      $('rowCount').textContent = `· ${resultData.length} 条`;
+      renderPreview();
+      setStatus(`✓ 识别完成：${colors.length} 色 × ${sizes.length} 码，共 ${resultData.length} 条记录`, 'ok');
+    } catch(err) {
+      setStatus('读取失败：' + err.message, 'err');
+      console.error(err);
+    }
+  });
+ 
+  function renderPreview() {
+    let html = '<table><thead><tr>';
+    headerRow.forEach(h => html += `<th>${h}</th>`);
+    html += '</tr></thead><tbody>';
+    resultData.slice(0, 100).forEach(r => {
+      html += '<tr>';
+      r.forEach(v => html += `<td>${escapeHtml(String(v))}</td>`);
       html += '</tr>';
     });
+    if (resultData.length > 100) {
+      html += `<tr><td colspan="${headerRow.length}" style="text-align:center; color:#8f959e;">… 还有 ${resultData.length - 100} 条</td></tr>`;
+    }
     html += '</tbody></table>';
     $('tableWrap').innerHTML = html;
- 
-    $('tableWrap').querySelectorAll('td[data-r]').forEach(td => {
-      td.addEventListener('click', onCellClick);
-    });
   }
  
-  function onCellClick(e) {
-    const r = +e.target.dataset.r;
-    const c = +e.target.dataset.c;
-    if (!startRC) { startRC = [r, c]; }
-    else if (!endRC) {
-      if (r >= startRC[0] && c >= startRC[1]) endRC = [r, c];
-      else { endRC = startRC; startRC = [r, c]; }
-    }
-    else { startRC = [r, c]; endRC = null; }
-    highlight();
-    updateSelDisplay();
-  }
- 
-  function highlight() {
-    $('tableWrap').querySelectorAll('td[data-r]').forEach(td => {
-      td.className = '';
-      const r = +td.dataset.r, c = +td.dataset.c;
-      if (startRC && r === startRC[0] && c === startRC[1]) td.classList.add('cell-start');
-      else if (endRC && r === endRC[0] && c === endRC[1]) td.classList.add('cell-end');
-      else if (startRC && endRC && r >= startRC[0] && r <= endRC[0] && c >= startRC[1] && c <= endRC[1]) {
-        td.classList.add('cell-range');
-      }
-    });
-  }
- 
-  function updateSelDisplay() {
-    $('startCell').textContent = startRC ? cellRef(...startRC) : '未选';
-    $('endCell').textContent = endRC ? cellRef(...endRC) : '未选';
-  }
- 
-  $('resetSel').addEventListener('click', () => {
-    startRC = null; endRC = null;
-    highlight(); updateSelDisplay();
-  });
- 
-  // ---------- Convert ----------
-  $('previewBtn').addEventListener('click', () => {
-    if (!startRC || !endRC) { setStatus('请先框选数据区域', 'err'); return; }
-    const [r0, c0] = startRC, [r1, c1] = endRC;
-    const colHeaders = [];
-    for (let c = c0 + 1; c <= c1; c++) colHeaders.push(String(rawData[r0][c] ?? '').trim());
-    const rowHeaders = [];
-    for (let r = r0 + 1; r <= r1; r++) rowHeaders.push(String(rawData[r][c0] ?? '').trim());
- 
-    const skipEmpty = $('skipEmpty').checked;
-    const skipTotal = $('skipTotal').checked;
-    const totalKw = ['总件','合计','总计','总数','total','sum'];
-    const isTotal = s => totalKw.some(k => String(s).toLowerCase().includes(k.toLowerCase()));
- 
-    resultData = [];
-    for (let i = 0; i < rowHeaders.length; i++) {
-      const rh = rowHeaders[i]; if (!rh) continue;
-      if (skipTotal && isTotal(rh)) continue;
-      for (let j = 0; j < colHeaders.length; j++) {
-        const ch = colHeaders[j]; if (!ch) continue;
-        if (skipTotal && isTotal(ch)) continue;
-        const v = rawData[r0 + 1 + i][c0 + 1 + j];
-        if (skipEmpty && (v === '' || v === null || v === undefined || v === 0 || v === '0')) continue;
-        resultData.push([rh, ch, v]);
-      }
-    }
-    $('outputSection').style.display = 'block';
-    $('rowCount').textContent = `· ${resultData.length} 条`;
-    renderOutput();
-    setStatus(`已生成 ${resultData.length} 条记录，检查预览后点"写入当前表格"`, 'ok');
-  });
- 
-  function renderOutput() {
-    let html = '<table><thead><tr><th>行</th><th>列</th><th>值</th></tr></thead><tbody>';
-    resultData.slice(0, 100).forEach(r => {
-      html += `<tr><td>${escapeHtml(String(r[0]))}</td><td>${escapeHtml(String(r[1]))}</td><td>${escapeHtml(String(r[2]))}</td></tr>`;
-    });
-    if (resultData.length > 100) html += `<tr><td colspan="3" style="text-align:center; color:#8f959e;">… 还有 ${resultData.length - 100} 条，写入时会全部处理</td></tr>`;
-    html += '</tbody></table>';
-    $('outputWrap').innerHTML = html;
-  }
- 
-  // ---------- Write to Feishu ----------
-  $('writeBtn').addEventListener('click', async () => {
-    if (!resultData.length) { setStatus('没有可写入的数据', 'err'); return; }
-    const rowFieldId = $('mapRow').value;
-    const colFieldId = $('mapCol').value;
-    const valFieldId = $('mapVal').value;
-    if (!rowFieldId || !colFieldId || !valFieldId) { setStatus('请选择三个字段映射', 'err'); return; }
- 
-    $('writeBtn').disabled = true;
+  // 复制
+  async function copyToClipboard(includeHeader) {
+    const lines = [];
+    if (includeHeader) lines.push(headerRow.join('\t'));
+    resultData.forEach(r => lines.push(r.join('\t')));
+    const text = lines.join('\n');
     try {
-      const table = await bitable.base.getActiveTable();
- 
-      // 先异步获取三个字段的类型（飞书新版 SDK type 是异步的）
-      const rowField = await table.getField(rowFieldId);
-      const colField = await table.getField(colFieldId);
-      const valField = await table.getField(valFieldId);
-      const rowType = await rowField.getType();
-      const colType = await colField.getType();
-      const valType = await valField.getType();
- 
-      setStatus(`字段类型：行=${rowType}, 列=${colType}, 值=${valType}。准备写入 ${resultData.length} 条…`);
- 
-      const records = [];
-      for (const [rh, ch, v] of resultData) {
-        const fields = {};
-        fields[rowFieldId] = toCellValue(rowType, rh);
-        fields[colFieldId] = toCellValue(colType, ch);
-        fields[valFieldId] = toCellValue(valType, v);
-        records.push({ fields });
-      }
- 
-      const BATCH = 500;
-      let done = 0;
-      for (let i = 0; i < records.length; i += BATCH) {
-        const chunk = records.slice(i, i + BATCH);
-        await table.addRecords(chunk);
-        done += chunk.length;
-        setStatus(`写入中 ${done}/${records.length}…`);
-      }
-      setStatus(`✓ 成功写入 ${records.length} 条记录`, 'ok');
+      await navigator.clipboard.writeText(text);
+      setStatus(`✓ 已复制 ${resultData.length} 条${includeHeader ? '（含表头）' : '（不含表头）'}到剪贴板`, 'ok');
     } catch(e) {
-      console.error('写入错误：', e);
-      setStatus('写入失败：' + (e.message || String(e)) + '（详细看浏览器控制台）', 'err');
-    } finally {
-      $('writeBtn').disabled = false;
+      setStatus('复制失败：' + e.message, 'err');
     }
+  }
+  $('copyBtn').addEventListener('click', () => copyToClipboard(true));
+  $('copyNoHeaderBtn').addEventListener('click', () => copyToClipboard(false));
+ 
+  $('csvBtn').addEventListener('click', () => {
+    const all = [headerRow, ...resultData];
+    const csv = all.map(r => r.map(c => {
+      const s = String(c ?? '');
+      return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    }).join(',')).join('\n');
+    const blob = new Blob(['\ufeff' + csv], {type: 'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'order-expanded.csv'; a.click();
+    URL.revokeObjectURL(url);
   });
  
-  // 字段类型枚举参考：
-  // 1=文本, 2=数字, 3=单选, 4=多选, 5=日期, 7=复选框, 11=人员, 13=电话, 15=URL, ...
-  function toCellValue(type, value) {
-    if (value === null || value === undefined || value === '') return null;
-    if (type === 2) {  // Number
-      const n = Number(value);
-      return isNaN(n) ? null : n;
-    }
-    if (type === 3) {  // SingleSelect
-      return { text: String(value) };
-    }
-    if (type === 4) {  // MultiSelect
-      return [{ text: String(value) }];
-    }
-    // 默认文本字段（type=1）
-    return [{ type: 'text', text: String(value) }];
-  }
- 
-  $('copyBtn').addEventListener('click', async () => {
-    const text = resultData.map(r => r.join('\t')).join('\n');
-    await navigator.clipboard.writeText(text);
-    setStatus('已复制为 TSV', 'ok');
+  $('xlsxBtn').addEventListener('click', () => {
+    const all = [headerRow, ...resultData];
+    const ws = XLSX.utils.aoa_to_sheet(all);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Expanded');
+    XLSX.writeFile(wb, 'order-expanded.xlsx');
   });
  
-  // ---------- Utils ----------
-  function colLetter(n) {
-    let s = ''; n = n + 1;
-    while (n > 0) { s = String.fromCharCode(65 + (n-1) % 26) + s; n = Math.floor((n-1)/26); }
-    return s;
-  }
-  function cellRef(r, c) { return colLetter(c) + (r + 1); }
   function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]); }
- 
-  // ---------- Init ----------
-  $('reloadBtn').addEventListener('click', loadFields);
- 
-  function tryInit() {
-    if (window.bitable) {
-      loadFields();
-      try { window.bitable.base.onSelectionChange(() => loadFields()); } catch(e) {}
-    } else if (window.__sdkError) {
-      setSdkStatus('SDK 全部加载失败，点"查看详细日志"', 'err');
-    } else {
-      setSdkStatus('SDK 加载中…', '');
-    }
-  }
- 
-  // 监听 ESM SDK 加载完成
-  window.addEventListener('sdk-ready', tryInit);
-  window.addEventListener('sdk-error', tryInit);
- 
-  // 启动时若已经加载好了就立即跑
-  if (window.__sdkLoaded) tryInit();
-  else if (window.__sdkError) tryInit();
-  else {
-    setSdkStatus('SDK 加载中…（依次尝试 esm.sh / jsdelivr / unpkg）', '');
-    // 兜底：15 秒后如果还没 ready 就提示
-    setTimeout(() => {
-      if (!window.bitable && !window.__sdkError) {
-        setSdkStatus('SDK 加载超时（15秒）。点"查看详细日志"看哪一步卡住了。', 'err');
-      }
-    }, 15000);
-  }
 })();
 </script>
 </body>
