@@ -6,14 +6,33 @@
 <title>三维转二维 · 飞书多维表格插件</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script type="module">
-  // 通过 esm.sh 加载飞书 Base SDK 的 ESM 版本，挂到 window.bitable
-  try {
-    const mod = await import('https://esm.sh/@lark-base-open/js-sdk@1.0.2');
-    window.bitable = mod.bitable;
-    window.__sdkLoaded = true;
-    window.dispatchEvent(new CustomEvent('sdk-ready'));
-  } catch (e) {
-    window.__sdkError = e.message || String(e);
+  // 多 CDN 回退加载飞书 Base SDK（ESM）
+  const cdnList = [
+    'https://esm.sh/@lark-base-open/js-sdk@1.0.2',
+    'https://cdn.jsdelivr.net/npm/@lark-base-open/js-sdk@1.0.2/+esm',
+    'https://unpkg.com/@lark-base-open/js-sdk@1.0.2?module'
+  ];
+  window.__sdkLog = [];
+  for (const url of cdnList) {
+    try {
+      window.__sdkLog.push('尝试 ' + url);
+      const mod = await import(url);
+      if (mod && mod.bitable) {
+        window.bitable = mod.bitable;
+        window.__sdkLoaded = true;
+        window.__sdkSource = url;
+        window.__sdkLog.push('成功 ' + url);
+        window.dispatchEvent(new CustomEvent('sdk-ready'));
+        break;
+      } else {
+        window.__sdkLog.push('加载了但没 bitable 导出 ' + url);
+      }
+    } catch (e) {
+      window.__sdkLog.push('失败 ' + url + ': ' + (e.message || e));
+    }
+  }
+  if (!window.__sdkLoaded) {
+    window.__sdkError = window.__sdkLog.join('\n');
     window.dispatchEvent(new CustomEvent('sdk-error'));
   }
 </script>
@@ -73,6 +92,14 @@
 </style>
 </head>
 <body>
+ 
+<div id="sdkBanner" style="margin: 0 0 14px; padding: 10px 12px; border-radius: 4px; background: #fff4e5; color: #8a5a00; font-size: 12px; border: 1px solid #ffd591;">
+  <strong>飞书连接状态：</strong><span id="sdkStatus">启动中…</span>
+  <details id="sdkDetails" style="margin-top: 6px; display: none;">
+    <summary style="cursor: pointer; font-size: 11px;">查看详细日志</summary>
+    <pre id="sdkLog" style="font-size: 10px; white-space: pre-wrap; margin: 6px 0 0; color: #646a73;"></pre>
+  </details>
+</div>
  
 <div class="section">
   <h3>① 导入本地三维表</h3>
@@ -148,6 +175,26 @@
     el.textContent = msg;
     el.className = type === 'err' ? 'status-err' : type === 'ok' ? 'status-ok' : '';
   };
+  const setSdkStatus = (msg, type) => {
+    const banner = $('sdkBanner');
+    const st = $('sdkStatus');
+    st.textContent = msg;
+    if (type === 'ok') {
+      banner.style.background = '#e8f6ea';
+      banner.style.color = '#1a7f3e';
+      banner.style.border = '1px solid #95d5a6';
+    } else if (type === 'err') {
+      banner.style.background = '#fff0f0';
+      banner.style.color = '#c64040';
+      banner.style.border = '1px solid #ffa7a7';
+      $('sdkDetails').style.display = 'block';
+    } else {
+      banner.style.background = '#fff4e5';
+      banner.style.color = '#8a5a00';
+      banner.style.border = '1px solid #ffd591';
+    }
+    if (window.__sdkLog) $('sdkLog').textContent = window.__sdkLog.join('\n');
+  };
  
   // ---------- Demo ----------
   const demoData = [
@@ -164,25 +211,25 @@
  
   // ---------- Load Feishu fields ----------
   async function loadFields() {
-    setStatus('连接飞书 SDK 中…');
+    setSdkStatus('连接表格中…');
     try {
       if (!window.bitable) {
-        setStatus('window.bitable 不存在，SDK 未加载', 'err');
+        setSdkStatus('SDK 未加载（window.bitable 不存在）', 'err');
         return;
       }
       if (!window.bitable.base) {
-        setStatus('bitable.base 不存在，SDK 结构异常', 'err');
+        setSdkStatus('SDK 结构异常（bitable.base 不存在）', 'err');
         return;
       }
       const table = await window.bitable.base.getActiveTable();
       if (!table) {
-        setStatus('未获取到当前表（getActiveTable 返回空）。请在多维表格里先选中一张表再打开插件。', 'err');
+        setSdkStatus('未获取到当前表，请在多维表格里先选中一张表再打开插件', 'err');
         return;
       }
       const tableName = await table.getName().catch(()=>'未知');
       const fields = await table.getFieldMetaList();
       if (!fields || fields.length === 0) {
-        setStatus(`已连接表「${tableName}」但字段数为 0。该表需要先创建字段（如颜色/尺码/数量）。`, 'err');
+        setSdkStatus(`已连接表「${tableName}」但字段数为 0`, 'err');
         return;
       }
       fieldMetaList = fields;
@@ -193,9 +240,9 @@
       autoPick('mapRow', ['颜色', '色', 'color']);
       autoPick('mapCol', ['尺码', '尺寸', 'size']);
       autoPick('mapVal', ['数量', '件数', 'qty', 'quantity', '总件']);
-      setStatus(`✓ 已连接表「${tableName}」，共 ${fields.length} 个字段`, 'ok');
+      setSdkStatus(`✓ 已连接表「${tableName}」，共 ${fields.length} 个字段`, 'ok');
     } catch(e) {
-      setStatus('连接失败：' + (e.message || String(e)) + '。可能飞书个人版不开放 Base SDK，需要企业版。', 'err');
+      setSdkStatus('连接失败：' + (e.message || String(e)), 'err');
       console.error(e);
     }
   }
@@ -421,9 +468,9 @@
       loadFields();
       try { window.bitable.base.onSelectionChange(() => loadFields()); } catch(e) {}
     } else if (window.__sdkError) {
-      setStatus('SDK 加载失败：' + window.__sdkError + '。可能是网络问题，请刷新重试。', 'err');
+      setSdkStatus('SDK 全部加载失败，点"查看详细日志"', 'err');
     } else {
-      setStatus('SDK 加载中…', '');
+      setSdkStatus('SDK 加载中…', '');
     }
   }
  
@@ -435,13 +482,13 @@
   if (window.__sdkLoaded) tryInit();
   else if (window.__sdkError) tryInit();
   else {
-    setStatus('SDK 加载中…（从 esm.sh 下载飞书 Base SDK）', '');
-    // 兜底：10 秒后如果还没 ready 就提示
+    setSdkStatus('SDK 加载中…（依次尝试 esm.sh / jsdelivr / unpkg）', '');
+    // 兜底：15 秒后如果还没 ready 就提示
     setTimeout(() => {
       if (!window.bitable && !window.__sdkError) {
-        setStatus('SDK 加载超时。请检查网络能否访问 esm.sh，或刷新重试。', 'err');
+        setSdkStatus('SDK 加载超时（15秒）。点"查看详细日志"看哪一步卡住了。', 'err');
       }
-    }, 10000);
+    }, 15000);
   }
 })();
 </script>
