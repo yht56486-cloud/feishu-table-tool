@@ -5,7 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>三维转二维 · 飞书多维表格插件</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@lark-base-open/js-sdk@0.3.14/dist/iife/index.iife.min.js"></script>
+<script type="module">
+  // 通过 esm.sh 加载飞书 Base SDK 的 ESM 版本，挂到 window.bitable
+  try {
+    const mod = await import('https://esm.sh/@lark-base-open/js-sdk@1.0.2');
+    window.bitable = mod.bitable;
+    window.__sdkLoaded = true;
+    window.dispatchEvent(new CustomEvent('sdk-ready'));
+  } catch (e) {
+    window.__sdkError = e.message || String(e);
+    window.dispatchEvent(new CustomEvent('sdk-error'));
+  }
+</script>
 <style>
   * { box-sizing: border-box; }
   body {
@@ -62,7 +73,7 @@
 </style>
 </head>
 <body>
-
+ 
 <div class="section">
   <h3>① 导入本地三维表</h3>
   <div class="row">
@@ -71,7 +82,7 @@
   </div>
   <div class="hint">支持 .xlsx / .xls / .csv，首个工作表</div>
 </div>
-
+ 
 <div class="section" id="previewSection" style="display:none;">
   <h3>② 框选数据区域</h3>
   <div class="hint">点左上角表头（如"颜色"）→ 点右下角最后一个数字</div>
@@ -82,7 +93,7 @@
   </div>
   <div id="tableWrap"></div>
 </div>
-
+ 
 <div class="section" id="configSection" style="display:none;">
   <h3>③ 字段映射</h3>
   <div class="hint">把转换后的三列（行/列/值）对应到飞书表字段</div>
@@ -108,7 +119,7 @@
   </div>
   <button id="previewBtn" style="margin-top: 8px;">预览转换结果</button>
 </div>
-
+ 
 <div class="section" id="outputSection" style="display:none;">
   <h3>④ 预览 & 写入 <span class="stat" id="rowCount"></span></h3>
   <div id="outputWrap"></div>
@@ -117,9 +128,12 @@
     <button id="copyBtn" style="flex: 0 0 auto;">复制为 TSV</button>
   </div>
 </div>
-
+ 
 <div id="status">就绪。请先在飞书多维表格中打开目标表，再使用本插件。</div>
-
+<div style="margin-top: 8px;">
+  <button id="reloadBtn" style="font-size: 11px;">↻ 重新连接飞书表格</button>
+</div>
+ 
 <script>
 (function(){
   const { bitable } = window;
@@ -127,14 +141,14 @@
   let startRC = null, endRC = null;
   let resultData = [];
   let fieldMetaList = [];
-
+ 
   const $ = id => document.getElementById(id);
   const setStatus = (msg, type) => {
     const el = $('status');
     el.textContent = msg;
     el.className = type === 'err' ? 'status-err' : type === 'ok' ? 'status-ok' : '';
   };
-
+ 
   // ---------- Demo ----------
   const demoData = [
     ['颜色','色号','XS','S','M','L','XL','','总件'],
@@ -147,27 +161,45 @@
     ['缅茨姆绿','',50,50,50,25,25,'',200],
     ['','',450,700,700,575,325,'',2750]
   ];
-
+ 
   // ---------- Load Feishu fields ----------
   async function loadFields() {
+    setStatus('连接飞书 SDK 中…');
     try {
-      const table = await bitable.base.getActiveTable();
+      if (!window.bitable) {
+        setStatus('window.bitable 不存在，SDK 未加载', 'err');
+        return;
+      }
+      if (!window.bitable.base) {
+        setStatus('bitable.base 不存在，SDK 结构异常', 'err');
+        return;
+      }
+      const table = await window.bitable.base.getActiveTable();
+      if (!table) {
+        setStatus('未获取到当前表（getActiveTable 返回空）。请在多维表格里先选中一张表再打开插件。', 'err');
+        return;
+      }
+      const tableName = await table.getName().catch(()=>'未知');
       const fields = await table.getFieldMetaList();
+      if (!fields || fields.length === 0) {
+        setStatus(`已连接表「${tableName}」但字段数为 0。该表需要先创建字段（如颜色/尺码/数量）。`, 'err');
+        return;
+      }
       fieldMetaList = fields;
       const opts = fields.map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('');
       $('mapRow').innerHTML = opts;
       $('mapCol').innerHTML = opts;
       $('mapVal').innerHTML = opts;
-      // Auto-match
       autoPick('mapRow', ['颜色', '色', 'color']);
       autoPick('mapCol', ['尺码', '尺寸', 'size']);
       autoPick('mapVal', ['数量', '件数', 'qty', 'quantity', '总件']);
-      setStatus(`已连接当前表，共 ${fields.length} 个字段`, 'ok');
+      setStatus(`✓ 已连接表「${tableName}」，共 ${fields.length} 个字段`, 'ok');
     } catch(e) {
-      setStatus('未能连接飞书表格，请确保本插件在多维表格扩展面板中打开。错误：' + e.message, 'err');
+      setStatus('连接失败：' + (e.message || String(e)) + '。可能飞书个人版不开放 Base SDK，需要企业版。', 'err');
+      console.error(e);
     }
   }
-
+ 
   function autoPick(selectId, keywords) {
     const sel = $(selectId);
     for (const opt of sel.options) {
@@ -178,7 +210,7 @@
       }
     }
   }
-
+ 
   // ---------- File input ----------
   $('fileInput').addEventListener('change', async e => {
     const file = e.target.files[0];
@@ -194,13 +226,13 @@
       setStatus('文件读取失败：' + err.message, 'err');
     }
   });
-
+ 
   $('demoBtn').addEventListener('click', () => {
     rawData = demoData.map(r => r.slice());
     renderPreview();
     setStatus('已加载示例数据');
   });
-
+ 
   // ---------- Preview with clickable cells ----------
   function renderPreview() {
     if (!rawData.length) return;
@@ -208,7 +240,7 @@
     $('configSection').style.display = 'block';
     startRC = null; endRC = null;
     updateSelDisplay();
-
+ 
     const maxCols = Math.max(...rawData.map(r => r.length));
     let html = '<table><thead><tr><th></th>';
     for (let c = 0; c < maxCols; c++) {
@@ -225,12 +257,12 @@
     });
     html += '</tbody></table>';
     $('tableWrap').innerHTML = html;
-
+ 
     $('tableWrap').querySelectorAll('td[data-r]').forEach(td => {
       td.addEventListener('click', onCellClick);
     });
   }
-
+ 
   function onCellClick(e) {
     const r = +e.target.dataset.r;
     const c = +e.target.dataset.c;
@@ -243,7 +275,7 @@
     highlight();
     updateSelDisplay();
   }
-
+ 
   function highlight() {
     $('tableWrap').querySelectorAll('td[data-r]').forEach(td => {
       td.className = '';
@@ -255,17 +287,17 @@
       }
     });
   }
-
+ 
   function updateSelDisplay() {
     $('startCell').textContent = startRC ? cellRef(...startRC) : '未选';
     $('endCell').textContent = endRC ? cellRef(...endRC) : '未选';
   }
-
+ 
   $('resetSel').addEventListener('click', () => {
     startRC = null; endRC = null;
     highlight(); updateSelDisplay();
   });
-
+ 
   // ---------- Convert ----------
   $('previewBtn').addEventListener('click', () => {
     if (!startRC || !endRC) { setStatus('请先框选数据区域', 'err'); return; }
@@ -274,12 +306,12 @@
     for (let c = c0 + 1; c <= c1; c++) colHeaders.push(String(rawData[r0][c] ?? '').trim());
     const rowHeaders = [];
     for (let r = r0 + 1; r <= r1; r++) rowHeaders.push(String(rawData[r][c0] ?? '').trim());
-
+ 
     const skipEmpty = $('skipEmpty').checked;
     const skipTotal = $('skipTotal').checked;
     const totalKw = ['总件','合计','总计','总数','total','sum'];
     const isTotal = s => totalKw.some(k => String(s).toLowerCase().includes(k.toLowerCase()));
-
+ 
     resultData = [];
     for (let i = 0; i < rowHeaders.length; i++) {
       const rh = rowHeaders[i]; if (!rh) continue;
@@ -297,7 +329,7 @@
     renderOutput();
     setStatus(`已生成 ${resultData.length} 条记录，检查预览后点"写入当前表格"`, 'ok');
   });
-
+ 
   function renderOutput() {
     let html = '<table><thead><tr><th>行</th><th>列</th><th>值</th></tr></thead><tbody>';
     resultData.slice(0, 100).forEach(r => {
@@ -307,7 +339,7 @@
     html += '</tbody></table>';
     $('outputWrap').innerHTML = html;
   }
-
+ 
   // ---------- Write to Feishu ----------
   $('writeBtn').addEventListener('click', async () => {
     if (!resultData.length) { setStatus('没有可写入的数据', 'err'); return; }
@@ -315,14 +347,14 @@
     const colFieldId = $('mapCol').value;
     const valFieldId = $('mapVal').value;
     if (!rowFieldId || !colFieldId || !valFieldId) { setStatus('请选择三个字段映射', 'err'); return; }
-
+ 
     $('writeBtn').disabled = true;
     try {
       const table = await bitable.base.getActiveTable();
       const rowField = await table.getField(rowFieldId);
       const colField = await table.getField(colFieldId);
       const valField = await table.getField(valFieldId);
-
+ 
       const records = [];
       for (const [rh, ch, v] of resultData) {
         const fields = {};
@@ -331,6 +363,7 @@
         fields[valFieldId] = await toCellValue(valField, v);
         records.push({ fields });
       }
+ 
       // Batch: 500 per request
       const BATCH = 500;
       let done = 0;
@@ -347,7 +380,7 @@
       $('writeBtn').disabled = false;
     }
   });
-
+ 
   // Convert string to the right cell value shape based on field type
   async function toCellValue(field, value) {
     const type = field.type;
@@ -364,13 +397,13 @@
     // Default: text (type 1) - needs array of segments
     return [{ type: 'text', text: String(value) }];
   }
-
+ 
   $('copyBtn').addEventListener('click', async () => {
     const text = resultData.map(r => r.join('\t')).join('\n');
     await navigator.clipboard.writeText(text);
     setStatus('已复制为 TSV', 'ok');
   });
-
+ 
   // ---------- Utils ----------
   function colLetter(n) {
     let s = ''; n = n + 1;
@@ -379,17 +412,36 @@
   }
   function cellRef(r, c) { return colLetter(c) + (r + 1); }
   function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]); }
-
+ 
   // ---------- Init ----------
-  if (window.bitable) {
-    loadFields();
-  } else {
-    // Retry – SDK 脚本可能还在加载
-    let tries = 0;
-    const timer = setInterval(() => {
-      if (window.bitable) { clearInterval(timer); loadFields(); }
-      else if (++tries > 20) { clearInterval(timer); setStatus('未检测到飞书多维表格 SDK，请在飞书多维表格扩展面板中打开本插件', 'err'); }
-    }, 300);
+  $('reloadBtn').addEventListener('click', loadFields);
+ 
+  function tryInit() {
+    if (window.bitable) {
+      loadFields();
+      try { window.bitable.base.onSelectionChange(() => loadFields()); } catch(e) {}
+    } else if (window.__sdkError) {
+      setStatus('SDK 加载失败：' + window.__sdkError + '。可能是网络问题，请刷新重试。', 'err');
+    } else {
+      setStatus('SDK 加载中…', '');
+    }
+  }
+ 
+  // 监听 ESM SDK 加载完成
+  window.addEventListener('sdk-ready', tryInit);
+  window.addEventListener('sdk-error', tryInit);
+ 
+  // 启动时若已经加载好了就立即跑
+  if (window.__sdkLoaded) tryInit();
+  else if (window.__sdkError) tryInit();
+  else {
+    setStatus('SDK 加载中…（从 esm.sh 下载飞书 Base SDK）', '');
+    // 兜底：10 秒后如果还没 ready 就提示
+    setTimeout(() => {
+      if (!window.bitable && !window.__sdkError) {
+        setStatus('SDK 加载超时。请检查网络能否访问 esm.sh，或刷新重试。', 'err');
+      }
+    }, 10000);
   }
 })();
 </script>
