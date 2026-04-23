@@ -398,20 +398,26 @@
     $('writeBtn').disabled = true;
     try {
       const table = await bitable.base.getActiveTable();
+ 
+      // 先异步获取三个字段的类型（飞书新版 SDK type 是异步的）
       const rowField = await table.getField(rowFieldId);
       const colField = await table.getField(colFieldId);
       const valField = await table.getField(valFieldId);
+      const rowType = await rowField.getType();
+      const colType = await colField.getType();
+      const valType = await valField.getType();
+ 
+      setStatus(`字段类型：行=${rowType}, 列=${colType}, 值=${valType}。准备写入 ${resultData.length} 条…`);
  
       const records = [];
       for (const [rh, ch, v] of resultData) {
         const fields = {};
-        fields[rowFieldId] = await toCellValue(rowField, rh);
-        fields[colFieldId] = await toCellValue(colField, ch);
-        fields[valFieldId] = await toCellValue(valField, v);
+        fields[rowFieldId] = toCellValue(rowType, rh);
+        fields[colFieldId] = toCellValue(colType, ch);
+        fields[valFieldId] = toCellValue(valType, v);
         records.push({ fields });
       }
  
-      // Batch: 500 per request
       const BATCH = 500;
       let done = 0;
       for (let i = 0; i < records.length; i += BATCH) {
@@ -422,26 +428,28 @@
       }
       setStatus(`✓ 成功写入 ${records.length} 条记录`, 'ok');
     } catch(e) {
-      setStatus('写入失败：' + e.message, 'err');
+      console.error('写入错误：', e);
+      setStatus('写入失败：' + (e.message || String(e)) + '（详细看浏览器控制台）', 'err');
     } finally {
       $('writeBtn').disabled = false;
     }
   });
  
-  // Convert string to the right cell value shape based on field type
-  async function toCellValue(field, value) {
-    const type = field.type;
-    // 1=text, 2=number, 3=singleSelect, 4=multiSelect, ...
+  // 字段类型枚举参考：
+  // 1=文本, 2=数字, 3=单选, 4=多选, 5=日期, 7=复选框, 11=人员, 13=电话, 15=URL, ...
+  function toCellValue(type, value) {
+    if (value === null || value === undefined || value === '') return null;
     if (type === 2) {  // Number
       const n = Number(value);
       return isNaN(n) ? null : n;
     }
-    if (type === 3 || type === 4) {  // Select
-      // 飞书选择类字段需传 { text: 'xxx' }，不存在时自动创建需要字段已开启
-      const text = String(value);
-      return type === 4 ? [{ text }] : { text };
+    if (type === 3) {  // SingleSelect
+      return { text: String(value) };
     }
-    // Default: text (type 1) - needs array of segments
+    if (type === 4) {  // MultiSelect
+      return [{ text: String(value) }];
+    }
+    // 默认文本字段（type=1）
     return [{ type: 'text', text: String(value) }];
   }
  
