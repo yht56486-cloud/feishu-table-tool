@@ -3,10 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BKF 订单表转换 · 自动写入飞书</title>
+<title>表格速读 · 批量订单识别与写入</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script type="module">
-  // 多 CDN 回退加载飞书 Base SDK
   const cdnList = [
     'https://esm.sh/@lark-base-open/js-sdk@1.0.2',
     'https://cdn.jsdelivr.net/npm/@lark-base-open/js-sdk@1.0.2/+esm',
@@ -37,356 +36,113 @@
   * { box-sizing: border-box; }
   body {
     font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
-    margin: 0; padding: 24px;
-    max-width: 960px; margin: 0 auto;
-    font-size: 14px;
-    color: #1f2329;
-    background: #f7f8fa;
+    margin: 0 auto; padding: 20px; max-width: 960px;
+    font-size: 14px; color: #1f2329; background: #f7f8fa;
   }
-  .card {
-    background: #fff;
-    border-radius: 8px;
-    padding: 20px;
-    margin-bottom: 16px;
-    border: 1px solid #eef0f2;
-  }
-  h1 { font-size: 20px; margin: 0 0 8px; font-weight: 500; }
-  h2 { font-size: 15px; margin: 0 0 10px; font-weight: 500; }
-  .subtitle { color: #8f959e; font-size: 13px; margin-bottom: 20px; }
+  .card { background: #fff; border-radius: 8px; padding: 16px 20px; margin-bottom: 14px; border: 1px solid #eef0f2; }
+  h1 { font-size: 18px; margin: 0 0 4px; font-weight: 500; }
+  h2 { font-size: 14px; margin: 0 0 10px; font-weight: 500; }
+  .subtitle { color: #8f959e; font-size: 12px; margin-bottom: 16px; }
   .hint { font-size: 12px; color: #8f959e; margin: 4px 0; }
   button {
-    background: #fff; border: 1px solid #dee0e3; padding: 6px 14px;
-    border-radius: 4px; cursor: pointer; font-size: 13px;
+    background: #fff; border: 1px solid #dee0e3; padding: 5px 12px;
+    border-radius: 4px; cursor: pointer; font-size: 12px;
   }
-  button:hover { background: #f5f6f7; }
+  button:hover:not(:disabled) { background: #f5f6f7; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
   button.primary { background: #3370ff; color: #fff; border-color: #3370ff; }
-  button.primary:hover { background: #2860e1; }
-  button.copy-big {
-    font-size: 14px; padding: 10px 24px;
-    background: #3370ff; color: #fff; border-color: #3370ff;
-  }
-  .meta-grid {
-    display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 12px 0;
-  }
-  .meta-item {
-    background: #f7f8fa; padding: 10px 12px; border-radius: 4px;
-  }
-  .meta-label { font-size: 11px; color: #8f959e; margin-bottom: 2px; }
-  .meta-value { font-size: 14px; font-weight: 500; color: #1f2329; }
-  .meta-empty { color: #c64040; font-weight: 400; font-size: 12px; }
-  #tableWrap { max-height: 400px; overflow: auto; border: 1px solid #eef0f2; border-radius: 4px; }
-  table { border-collapse: collapse; font-size: 12px; width: 100%; }
-  th, td { padding: 6px 10px; border: 1px solid #eef0f2; text-align: left; }
-  th { background: #f7f8fa; position: sticky; top: 0; font-weight: 500; color: #646a73; }
-  #status {
-    padding: 10px 14px; border-radius: 4px;
-    background: #f0f2f5; font-size: 12px; color: #646a73;
-  }
+  button.primary:hover:not(:disabled) { background: #2860e1; }
+  button.big { font-size: 14px; padding: 8px 20px; }
+  button.danger { color: #c64040; border-color: #ffa7a7; }
+  button.danger:hover:not(:disabled) { background: #fff0f0; }
+ 
+  #sdkBanner { margin: 0 0 12px; padding: 8px 12px; border-radius: 4px; background: #fff4e5; color: #8a5a00; font-size: 12px; border: 1px solid #ffd591; }
+ 
+  .order-card { background: #fff; border: 1px solid #eef0f2; border-radius: 6px; padding: 12px 14px; margin-bottom: 10px; }
+  .order-card.status-ready { border-left: 3px solid #faad14; }
+  .order-card.status-error { border-left: 3px solid #c64040; background: #fffafa; }
+  .order-card.status-writing { border-left: 3px solid #3370ff; background: #f0f7ff; }
+  .order-card.status-done { border-left: 3px solid #52c41a; background: #f6ffed; }
+  .order-card.status-skipped { border-left: 3px solid #bfbfbf; opacity: 0.6; }
+  .oc-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+  .oc-filename { font-weight: 500; font-size: 13px; }
+  .oc-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #f0f2f5; color: #646a73; font-weight: 400; }
+  .oc-badge.ready { background: #fff7e6; color: #8a5a00; }
+  .oc-badge.error { background: #fff0f0; color: #c64040; }
+  .oc-badge.writing { background: #e1ebff; color: #1456f0; }
+  .oc-badge.done { background: #e8f6ea; color: #1a7f3e; }
+  .oc-badge.skipped { background: #f0f2f5; color: #8f959e; }
+  .oc-meta { font-size: 12px; color: #646a73; line-height: 1.7; margin-bottom: 8px; }
+  .oc-meta strong { color: #1f2329; font-weight: 500; }
+  .oc-warn { background: #fff7e6; border: 1px solid #ffd591; border-radius: 4px; padding: 6px 10px; font-size: 11px; color: #8a5a00; margin: 6px 0; }
+  .oc-err { background: #fff0f0; border: 1px solid #ffa7a7; border-radius: 4px; padding: 6px 10px; font-size: 11px; color: #c64040; margin: 6px 0; }
+  .oc-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .oc-preview { display: none; margin-top: 8px; }
+  .oc-preview.open { display: block; }
+  .oc-preview table { font-size: 11px; border-collapse: collapse; width: 100%; }
+  .oc-preview th, .oc-preview td { padding: 3px 6px; border: 1px solid #eef0f2; }
+  .oc-preview th { background: #f7f8fa; color: #646a73; font-weight: 400; }
+  .oc-preview-wrap { max-height: 200px; overflow: auto; border: 1px solid #eef0f2; border-radius: 4px; }
+ 
+  input[type="text"], select { padding: 4px 8px; border: 1px solid #dee0e3; border-radius: 4px; font-size: 12px; }
+  .mapping-grid { display: grid; grid-template-columns: 80px 1fr; gap: 6px 10px; align-items: center; font-size: 12px; }
+ 
+  #batchBar { position: sticky; top: 0; z-index: 10; background: #fff; padding: 10px 14px; border: 1px solid #eef0f2; border-radius: 6px; margin-bottom: 12px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .stats { font-size: 12px; color: #646a73; }
+  .stats span { margin-right: 10px; }
+  .stats .s-ready { color: #8a5a00; }
+  .stats .s-error { color: #c64040; }
+  .stats .s-done { color: #1a7f3e; }
+ 
+  #status { padding: 8px 12px; border-radius: 4px; background: #f0f2f5; font-size: 12px; color: #646a73; margin-top: 10px; }
   .status-err { background: #fff0f0 !important; color: #c64040 !important; }
   .status-ok { background: #e8f6ea !important; color: #1a7f3e !important; }
-  .export-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
-  .paste-hint {
-    background: #f0f7ff; border: 1px solid #d1e3fd;
-    border-radius: 4px; padding: 10px 12px; font-size: 12px;
-    color: #1456f0; margin-top: 10px; line-height: 1.6;
-  }
-  .warning {
-    background: #fff7e6; border: 1px solid #ffd591; border-radius: 4px;
-    padding: 10px 12px; font-size: 12px; color: #8a5a00; margin-top: 8px;
-  }
 </style>
 </head>
 <body>
  
-<h1>BKF 订单表 → 飞书多维表格</h1>
-<p class="subtitle">上传订单表 xlsx，自动提取字段，一键写入飞书多维表格</p>
+<h1>表格速读</h1>
+<p class="subtitle">批量上传订单表 xlsx，自动识别后逐个写入飞书多维表格</p>
  
-<div id="sdkBanner" style="margin: 0 0 14px; padding: 10px 12px; border-radius: 4px; background: #fff4e5; color: #8a5a00; font-size: 12px; border: 1px solid #ffd591;">
+<div id="sdkBanner">
   <strong>飞书连接状态：</strong><span id="sdkStatus">启动中…</span>
   <button id="reloadBtn" style="float: right; font-size: 11px; padding: 2px 8px;">重连</button>
   <details id="sdkDetails" style="margin-top: 6px; display: none;">
-    <summary style="cursor: pointer; font-size: 11px;">查看详细日志</summary>
+    <summary style="cursor: pointer; font-size: 11px;">详细日志</summary>
     <pre id="sdkLog" style="font-size: 10px; white-space: pre-wrap; margin: 6px 0 0;"></pre>
   </details>
 </div>
  
 <div class="card">
-  <h2>① 上传订单表</h2>
-  <div class="hint" style="margin-bottom: 10px;">固定模板：款式号在 B2，日期在 J2，颜色×尺码矩阵从 D3 开始</div>
-  <input type="file" id="fileInput" accept=".xlsx,.xls" />
-</div>
- 
-<div class="card" id="metaCard" style="display:none;">
-  <h2>② 识别结果</h2>
-  <div class="meta-grid" id="metaGrid"></div>
-  <div id="warnings"></div>
+  <h2>① 上传订单表（可多选）</h2>
+  <div class="hint" style="margin-bottom: 8px;">固定模板：A1 订单标题、B2 款式、J2 日期、D3 起为颜色×尺码矩阵。可一次选多个文件，或分批追加</div>
+  <input type="file" id="fileInput" accept=".xlsx,.xls" multiple />
+  <button id="clearBtn" style="margin-left: 8px;" class="danger">清空全部</button>
 </div>
  
 <div class="card" id="mappingCard" style="display:none;">
-  <h2>③ 字段映射（本地 → 飞书）</h2>
-  <div class="hint" style="margin-bottom: 10px;">把识别出的每个字段对应到飞书表的字段。相同名字会自动匹配，不需要写入的字段选"不写入"</div>
-  <div id="mappingGrid" style="display: grid; grid-template-columns: 120px 1fr; gap: 6px 12px; align-items: center; font-size: 13px;"></div>
+  <h2>② 字段映射（本地 → 飞书）· 所有订单共用</h2>
+  <div id="mappingGrid" class="mapping-grid"></div>
 </div>
  
-<div class="card" id="previewCard" style="display:none;">
-  <h2>④ 预览 & 写入 <span id="rowCount" style="font-size: 12px; color: #8f959e; font-weight: 400;"></span></h2>
-  <div id="tableWrap"></div>
-  <div class="export-actions">
-    <button id="writeBtn" class="copy-big">✨ 一键写入飞书</button>
-    <button id="copyBtn">📋 复制（含表头）</button>
-    <button id="copyNoHeaderBtn">复制不含表头</button>
-    <button id="csvBtn">下载 CSV</button>
-    <button id="xlsxBtn">下载 Excel</button>
+<div class="card" id="ordersCard" style="display:none;">
+  <div id="batchBar">
+    <div class="stats" id="stats"></div>
+    <div style="margin-left: auto; display: flex; gap: 6px;">
+      <button id="writeAllBtn" class="primary big">✨ 全部写入飞书</button>
+    </div>
   </div>
+  <div id="ordersList"></div>
 </div>
  
-<div id="status">请上传订单表 xlsx 文件</div>
+<div id="status">请上传一个或多个订单表 xlsx 文件</div>
  
 <script>
 (function(){
-  let resultData = [];
-  let headerRow = ['订单编号', '款式', '品类', '颜色', '尺码', '件数', '日期'];
- 
-  const $ = id => document.getElementById(id);
-  const setStatus = (msg, type) => {
-    const el = $('status');
-    el.textContent = msg;
-    el.className = type === 'err' ? 'status-err' : type === 'ok' ? 'status-ok' : '';
-  };
- 
-  // Excel 日期序列号 → YYYY-MM-DD
-  function excelDateToStr(serial) {
-    if (typeof serial !== 'number' || isNaN(serial)) return String(serial);
-    // Excel base: 1899-12-30
-    const ms = (serial - 25569) * 86400 * 1000;
-    const d = new Date(ms);
-    if (isNaN(d.getTime())) return String(serial);
-    const y = d.getUTCFullYear();
-    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(d.getUTCDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-  }
- 
-  // 从 "BKF - 马甲 - 1" 解析出 "BKF马甲" 和序号 "1"
-  function parseOrderTitle(raw) {
-    const s = String(raw || '').trim();
-    const parts = s.split(/\s*-\s*/);
-    if (parts.length >= 2) {
-      const last = parts[parts.length - 1].trim();
-      // 末尾是否为纯数字序号
-      if (/^\d+$/.test(last)) {
-        const category = parts.slice(0, -1).map(p => p.trim()).join('');
-        return { category, seq: last };
-      }
-    }
-    return { category: s.replace(/\s*-\s*/g, ''), seq: '' };
-  }
- 
-  $('fileInput').addEventListener('change', async e => {
-    const file = e.target.files[0];
-    if (!file) return;
-    try {
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, {type: 'array', cellDates: false});
-      // 默认读第一个 sheet，或找叫"订单"的
-      let sheetName = wb.SheetNames[0];
-      if (wb.SheetNames.includes('订单')) sheetName = '订单';
-      const ws = wb.Sheets[sheetName];
- 
-      // 读取指定单元格
-      const getCell = ref => {
-        const c = ws[ref];
-        return c ? c.v : undefined;
-      };
- 
-      // 提取公共字段
-      const title = getCell('A1');                      // "BKF - 马甲 - 1"
-      const styleNo = getCell('B2');                    // 2607
-      const brand = getCell('D2');                      // 品牌（可能空）
-      const totalQty = getCell('H2');                   // 1440
-      const dateRaw = getCell('J2');                    // 46099
-      const dateStr = excelDateToStr(dateRaw);
-      const { category, seq } = parseOrderTitle(title);
-      const orderNo = seq ? `${category}-${seq}` : category;
- 
-      // 提取尺码表头（E3~J3，可能延伸）
-      const sizes = [];
-      const sizeCols = ['E', 'F', 'G', 'H', 'I', 'J'];
-      for (const col of sizeCols) {
-        const v = getCell(col + '3');
-        if (v) sizes.push({col, size: String(v).trim()});
-      }
- 
-      // 提取颜色行（D4 向下找，直到 D 列为空或遇到"码总数"）
-      const colors = [];
-      for (let r = 4; r <= 13; r++) {
-        const v = getCell('D' + r);
-        if (!v) continue;
-        const s = String(v).trim();
-        if (!s || s.includes('码总数') || s.includes('合计') || s.includes('总数')) break;
-        colors.push({row: r, color: s});
-      }
- 
-      // 展开矩阵
-      resultData = [];
-      for (const {row, color} of colors) {
-        for (const {col, size} of sizes) {
-          const qty = getCell(col + row);
-          if (qty === undefined || qty === null || qty === '' || qty === 0) continue;
-          resultData.push([orderNo, String(styleNo||''), category, color, size, qty, dateStr]);
-        }
-      }
- 
-      // 渲染元信息卡
-      const metaGrid = $('metaGrid');
-      const mkItem = (label, value, warn) => {
-        const empty = value === undefined || value === null || value === '';
-        return `<div class="meta-item">
-          <div class="meta-label">${label}</div>
-          <div class="meta-value ${empty ? 'meta-empty' : ''}">${empty ? '(未提取到)' : value}</div>
-        </div>`;
-      };
-      metaGrid.innerHTML =
-        mkItem('订单编号', orderNo) +
-        mkItem('款式号', styleNo) +
-        mkItem('品类', category) +
-        mkItem('日期', dateStr) +
-        mkItem('总件数', totalQty) +
-        mkItem('颜色数', colors.length) +
-        mkItem('尺码数', sizes.length) +
-        mkItem('展开行数', resultData.length);
- 
-      // 警告
-      const warns = [];
-      if (!styleNo) warns.push('款式号（B2）为空');
-      if (!title) warns.push('订单标题（A1）为空');
-      if (!sizes.length) warns.push('未识别到尺码表头（E3~J3）');
-      if (!colors.length) warns.push('未识别到颜色行（D4 向下）');
-      if (totalQty && resultData.length) {
-        const sum = resultData.reduce((a, r) => a + (Number(r[5]) || 0), 0);
-        if (sum !== totalQty) warns.push(`展开后件数合计 ${sum}，与 H2 的总件数 ${totalQty} 不一致，请核对是否有空值或异常值`);
-      }
-      $('warnings').innerHTML = warns.length ? `<div class="warning">⚠ ${warns.join('；')}</div>` : '';
- 
-      $('metaCard').style.display = 'block';
-      $('mappingCard').style.display = 'block';
-      $('previewCard').style.display = 'block';
-      $('rowCount').textContent = `· ${resultData.length} 条`;
-      renderPreview();
-      renderMapping();
-      setStatus(`✓ 识别完成：${colors.length} 色 × ${sizes.length} 码，共 ${resultData.length} 条记录`, 'ok');
-    } catch(err) {
-      setStatus('读取失败：' + err.message, 'err');
-      console.error(err);
-    }
-  });
- 
-  function renderPreview() {
-    let html = '<table><thead><tr>';
-    headerRow.forEach(h => html += `<th>${h}</th>`);
-    html += '</tr></thead><tbody>';
-    resultData.slice(0, 100).forEach(r => {
-      html += '<tr>';
-      r.forEach(v => html += `<td>${escapeHtml(String(v))}</td>`);
-      html += '</tr>';
-    });
-    if (resultData.length > 100) {
-      html += `<tr><td colspan="${headerRow.length}" style="text-align:center; color:#8f959e;">… 还有 ${resultData.length - 100} 条</td></tr>`;
-    }
-    html += '</tbody></table>';
-    $('tableWrap').innerHTML = html;
-  }
- 
-  // 复制（三重降级：navigator.clipboard → execCommand → 手动文本框）
-  async function copyToClipboard(includeHeader) {
-    const lines = [];
-    if (includeHeader) lines.push(headerRow.join('\t'));
-    resultData.forEach(r => lines.push(r.join('\t')));
-    const text = lines.join('\n');
- 
-    // 方法 1：现代 API
-    try {
-      await navigator.clipboard.writeText(text);
-      setStatus(`✓ 已复制 ${resultData.length} 条${includeHeader ? '（含表头）' : '（不含表头）'}到剪贴板`, 'ok');
-      return;
-    } catch(e) {
-      console.warn('clipboard API failed, falling back:', e);
-    }
- 
-    // 方法 2：老式 execCommand
-    try {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.position = 'fixed';
-      ta.style.top = '-9999px';
-      document.body.appendChild(ta);
-      ta.focus();
-      ta.select();
-      const ok = document.execCommand('copy');
-      document.body.removeChild(ta);
-      if (ok) {
-        setStatus(`✓ 已复制 ${resultData.length} 条到剪贴板（降级模式）`, 'ok');
-        return;
-      }
-    } catch(e) {
-      console.warn('execCommand failed:', e);
-    }
- 
-    // 方法 3：手动复制（显示一个可选中的大文本框）
-    showManualCopyBox(text);
-  }
- 
-  function showManualCopyBox(text) {
-    let box = document.getElementById('manualCopyBox');
-    if (!box) {
-      box = document.createElement('div');
-      box.id = 'manualCopyBox';
-      box.style.cssText = 'margin-top: 12px; padding: 12px; border: 2px solid #3370ff; border-radius: 4px; background: #fff;';
-      box.innerHTML = `
-        <div style="font-size: 12px; color: #1456f0; margin-bottom: 6px;">
-          <strong>飞书禁用了自动复制，请手动复制：</strong>点击下方文本框 → Ctrl+A 全选 → Ctrl+C 复制 → 去飞书表格粘贴
-        </div>
-        <textarea id="manualCopyText" readonly style="width: 100%; height: 120px; font-family: Menlo, monospace; font-size: 11px; padding: 8px; border: 1px solid #dee0e3; border-radius: 4px;"></textarea>
-      `;
-      $('previewCard').appendChild(box);
-    }
-    const ta = document.getElementById('manualCopyText');
-    ta.value = text;
-    ta.focus();
-    ta.select();
-    setStatus(`自动复制失败，已为你准备好文本，请在下方文本框手动 Ctrl+A 全选后 Ctrl+C 复制`, 'err');
-    box.scrollIntoView({behavior: 'smooth', block: 'center'});
-  }
-  $('copyBtn').addEventListener('click', () => copyToClipboard(true));
-  $('copyNoHeaderBtn').addEventListener('click', () => copyToClipboard(false));
- 
-  $('csvBtn').addEventListener('click', () => {
-    const all = [headerRow, ...resultData];
-    const csv = all.map(r => r.map(c => {
-      const s = String(c ?? '');
-      return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-    }).join(',')).join('\n');
-    const blob = new Blob(['\ufeff' + csv], {type: 'text/csv'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'order-expanded.csv'; a.click();
-    URL.revokeObjectURL(url);
-  });
- 
-  $('xlsxBtn').addEventListener('click', () => {
-    const all = [headerRow, ...resultData];
-    const ws = XLSX.utils.aoa_to_sheet(all);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Expanded');
-    XLSX.writeFile(wb, 'order-expanded.xlsx');
-  });
- 
-  function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]); }
- 
-  // ========== 飞书 SDK 集成 ==========
-  let feishuFields = [];  // 飞书表的字段元数据
+  let orders = [];
+  let nextId = 1;
+  let feishuFields = [];
   const localFields = ['订单编号', '款式', '品类', '颜色', '尺码', '件数', '日期'];
-  // 常用别名匹配
   const aliases = {
     '订单编号': ['订单编号', '订单号', '编号'],
     '款式': ['款式', '款号', '款式号', '版型'],
@@ -397,73 +153,243 @@
     '日期': ['日期', '时间', 'date'],
   };
  
-  function setSdkStatus(msg, type) {
-    const banner = $('sdkBanner');
-    const st = $('sdkStatus');
-    st.textContent = msg;
-    if (type === 'ok') {
-      banner.style.background = '#e8f6ea'; banner.style.color = '#1a7f3e';
-      banner.style.border = '1px solid #95d5a6';
-    } else if (type === 'err') {
-      banner.style.background = '#fff0f0'; banner.style.color = '#c64040';
-      banner.style.border = '1px solid #ffa7a7';
-      $('sdkDetails').style.display = 'block';
-    } else {
-      banner.style.background = '#fff4e5'; banner.style.color = '#8a5a00';
-      banner.style.border = '1px solid #ffd591';
+  const $ = id => document.getElementById(id);
+  const setStatus = (msg, type) => {
+    const el = $('status');
+    el.textContent = msg;
+    el.className = type === 'err' ? 'status-err' : type === 'ok' ? 'status-ok' : '';
+  };
+ 
+  $('fileInput').addEventListener('change', async e => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    for (const file of files) await processFile(file);
+    e.target.value = '';
+    refreshUI();
+  });
+ 
+  $('clearBtn').addEventListener('click', () => {
+    if (!orders.length) return;
+    if (confirm(`清空全部 ${orders.length} 个订单？（已写入飞书的不会删除）`)) {
+      orders = [];
+      refreshUI();
+      setStatus('已清空', '');
     }
-    if (window.__sdkLog) $('sdkLog').textContent = window.__sdkLog.join('\n');
+  });
+ 
+  async function processFile(file) {
+    const id = nextId++;
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, {type: 'array', cellDates: false});
+      let sheetName = wb.SheetNames[0];
+      if (wb.SheetNames.includes('订单')) sheetName = '订单';
+      const ws = wb.Sheets[sheetName];
+      const result = extractOrder(ws);
+      orders.push({ id, filename: file.name, status: result.errorMsg ? 'error' : 'ready', ...result });
+    } catch (e) {
+      orders.push({
+        id, filename: file.name, status: 'error',
+        meta: {}, records: [], warnings: [],
+        errorMsg: '读取失败：' + (e.message || String(e))
+      });
+    }
   }
  
-  async function loadFeishuFields() {
-    setSdkStatus('连接表格中…');
-    try {
-      if (!window.bitable || !window.bitable.base) {
-        setSdkStatus('SDK 未加载', 'err');
-        return false;
+  function excelDateToStr(serial) {
+    if (typeof serial !== 'number' || isNaN(serial)) return String(serial);
+    const ms = (serial - 25569) * 86400 * 1000;
+    const d = new Date(ms);
+    if (isNaN(d.getTime())) return String(serial);
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
+  }
+ 
+  function parseOrderTitle(raw) {
+    const s = String(raw || '').trim();
+    const parts = s.split(/\s*-\s*/);
+    if (parts.length >= 2) {
+      const last = parts[parts.length - 1].trim();
+      if (/^\d+$/.test(last)) {
+        const category = parts.slice(0, -1).map(p => p.trim()).join('');
+        return { category, seq: last };
       }
-      const table = await window.bitable.base.getActiveTable();
-      if (!table) { setSdkStatus('未获取到当前表', 'err'); return false; }
-      const tableName = await table.getName().catch(()=>'未知');
-      const fields = await table.getFieldMetaList();
-      if (!fields || !fields.length) {
-        setSdkStatus(`已连接表「${tableName}」但字段数为 0`, 'err');
-        return false;
-      }
-      feishuFields = fields;
-      setSdkStatus(`✓ 已连接表「${tableName}」，共 ${fields.length} 个字段`, 'ok');
-      // 已经有结果数据 => 刷新映射
-      if (resultData.length) renderMapping();
-      return true;
-    } catch(e) {
-      setSdkStatus('连接失败：' + (e.message || String(e)), 'err');
-      console.error(e);
-      return false;
     }
+    return { category: s.replace(/\s*-\s*/g, ''), seq: '' };
+  }
+ 
+  function extractOrder(ws) {
+    const getCell = ref => {
+      const c = ws[ref];
+      return c ? c.v : undefined;
+    };
+    const title = getCell('A1');
+    const styleNo = getCell('B2');
+    const totalQty = getCell('H2');
+    const dateRaw = getCell('J2');
+    const dateStr = excelDateToStr(dateRaw);
+    const { category, seq } = parseOrderTitle(title);
+    const orderNo = seq ? `${category}-${seq}` : category;
+ 
+    const sizes = [];
+    for (const col of ['E','F','G','H','I','J']) {
+      const v = getCell(col + '3');
+      if (v) sizes.push({col, size: String(v).trim()});
+    }
+ 
+    const colors = [];
+    for (let r = 4; r <= 13; r++) {
+      const v = getCell('D' + r);
+      if (!v) continue;
+      const s = String(v).trim();
+      if (s.includes('码总数') || s.includes('合计') || s.includes('总数')) break;
+      colors.push({row: r, color: s});
+    }
+ 
+    const records = [];
+    for (const {row, color} of colors) {
+      for (const {col, size} of sizes) {
+        const qty = getCell(col + row);
+        if (qty === undefined || qty === null || qty === '' || qty === 0) continue;
+        records.push([orderNo, String(styleNo||''), category, color, size, qty, dateStr]);
+      }
+    }
+ 
+    const warnings = [];
+    let errorMsg = '';
+    if (!styleNo) warnings.push('款式号（B2）为空');
+    if (!title) errorMsg = '订单标题（A1）为空';
+    else if (!sizes.length) errorMsg = '未识别到尺码表头（E3~J3）';
+    else if (!colors.length) errorMsg = '未识别到颜色行（D4 向下）';
+    else if (totalQty && records.length) {
+      const sum = records.reduce((a, r) => a + (Number(r[5]) || 0), 0);
+      if (sum !== totalQty) {
+        errorMsg = `展开后件数合计 ${sum}，与总件数 ${totalQty} 不一致`;
+      }
+    }
+ 
+    return {
+      meta: { orderNo, styleNo, category, dateStr, totalQty, colorCount: colors.length, sizeCount: sizes.length },
+      records, warnings, errorMsg
+    };
+  }
+ 
+  function refreshUI() {
+    renderStats();
+    renderOrders();
+    $('ordersCard').style.display = orders.length ? 'block' : 'none';
+    $('mappingCard').style.display = orders.length && feishuFields.length ? 'block' : 'none';
+    if (feishuFields.length && orders.length) renderMapping();
+    const hasError = orders.some(o => o.status === 'error');
+    const hasReady = orders.some(o => o.status === 'ready');
+    const btn = $('writeAllBtn');
+    btn.disabled = hasError || !hasReady || !feishuFields.length;
+    if (hasError) btn.title = '有订单识别失败，修复或移除后才能批量写入';
+    else if (!feishuFields.length) btn.title = '未连接飞书';
+    else if (!hasReady) btn.title = '没有待写入的订单';
+    else btn.title = '';
+  }
+ 
+  function renderStats() {
+    const count = (s) => orders.filter(o => o.status === s).length;
+    const ready = count('ready'), err = count('error'), done = count('done'), skip = count('skipped');
+    $('stats').innerHTML = `共 <strong>${orders.length}</strong> 个订单`
+      + (ready ? ` · <span class="s-ready">待写入 ${ready}</span>` : '')
+      + (err ? ` · <span class="s-error">识别有误 ${err}</span>` : '')
+      + (done ? ` · <span class="s-done">已写入 ${done}</span>` : '')
+      + (skip ? ` · 已跳过 ${skip}` : '');
+  }
+ 
+  function renderOrders() {
+    const wrap = $('ordersList');
+    wrap.innerHTML = orders.map(renderOrderCard).join('');
+    orders.forEach(o => {
+      const card = document.getElementById('order-' + o.id);
+      if (!card) return;
+      const q = sel => card.querySelector(sel);
+      q('.btn-preview') && q('.btn-preview').addEventListener('click', () => q('.oc-preview').classList.toggle('open'));
+      q('.btn-write') && q('.btn-write').addEventListener('click', () => writeOne(o.id));
+      q('.btn-skip') && q('.btn-skip').addEventListener('click', () => {
+        o.status = o.status === 'skipped' ? 'ready' : 'skipped';
+        refreshUI();
+      });
+      q('.btn-remove') && q('.btn-remove').addEventListener('click', () => {
+        orders = orders.filter(x => x.id !== o.id);
+        refreshUI();
+      });
+    });
+  }
+ 
+  function renderOrderCard(o) {
+    const badgeText = {ready:'待写入', error:'识别有误', writing:'写入中…', done:'已写入', skipped:'已跳过'}[o.status];
+    const m = o.meta || {};
+    const metaLine = o.status === 'error' && !m.orderNo ? '' : `
+      <div class="oc-meta">
+        <strong>${escapeHtml(m.orderNo || '-')}</strong> · 款式 ${escapeHtml(String(m.styleNo || '-'))} · 品类 ${escapeHtml(m.category || '-')} · 日期 ${escapeHtml(m.dateStr || '-')}<br>
+        ${m.colorCount || 0} 色 × ${m.sizeCount || 0} 码 = <strong>${o.records.length} 条</strong>，合计 <strong>${m.totalQty || 0}</strong> 件
+      </div>
+    `;
+    const warnBlock = o.warnings && o.warnings.length ? `<div class="oc-warn">⚠ ${o.warnings.map(escapeHtml).join('；')}</div>` : '';
+    const errBlock = o.errorMsg ? `<div class="oc-err">✕ ${escapeHtml(o.errorMsg)}</div>` : '';
+ 
+    let actions = '';
+    if (o.status === 'ready') {
+      actions = `<button class="btn-preview">预览</button><button class="btn-write primary">写入飞书</button><button class="btn-skip">跳过</button><button class="btn-remove danger">移除</button>`;
+    } else if (o.status === 'error') {
+      actions = `<button class="btn-remove danger">移除</button>`;
+    } else if (o.status === 'done') {
+      actions = `<button class="btn-preview">预览</button><button class="btn-remove">从列表移除</button>`;
+    } else if (o.status === 'skipped') {
+      actions = `<button class="btn-skip">取消跳过</button><button class="btn-remove danger">移除</button>`;
+    } else if (o.status === 'writing') {
+      actions = `<span style="color: #1456f0; font-size: 12px;">写入中，请勿关闭…</span>`;
+    }
+ 
+    const previewBlock = o.records.length ? `
+      <div class="oc-preview">
+        <div class="oc-preview-wrap">
+          <table>
+            <thead><tr>${['订单编号','款式','品类','颜色','尺码','件数','日期'].map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+            <tbody>
+              ${o.records.slice(0, 50).map(r => `<tr>${r.map(v=>`<td>${escapeHtml(String(v))}</td>`).join('')}</tr>`).join('')}
+              ${o.records.length > 50 ? `<tr><td colspan="7" style="text-align:center;color:#8f959e;">… 还有 ${o.records.length-50} 条</td></tr>` : ''}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    ` : '';
+ 
+    return `
+      <div class="order-card status-${o.status}" id="order-${o.id}">
+        <div class="oc-head">
+          <div class="oc-filename">📄 ${escapeHtml(o.filename)}</div>
+          <span class="oc-badge ${o.status}">${badgeText}</span>
+        </div>
+        ${metaLine}
+        ${warnBlock}
+        ${errBlock}
+        <div class="oc-actions">${actions}</div>
+        ${previewBlock}
+      </div>
+    `;
   }
  
   function renderMapping() {
     const grid = $('mappingGrid');
-    if (!feishuFields.length) {
-      grid.innerHTML = '<div style="grid-column: 1/-1; color: #c64040; font-size: 12px;">未连接飞书表格（或未检测到字段）。"一键写入飞书"按钮不可用。可用右上角"重连"重试。</div>';
-      return;
-    }
+    const currentMap = getMapping();
     let html = '';
     localFields.forEach(local => {
       const opts = ['<option value="__skip__">（不写入）</option>'].concat(
         feishuFields.map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`)
       ).join('');
-      html += `<label>${local}</label>
-        <select data-local="${local}" style="padding: 4px 8px; border: 1px solid #dee0e3; border-radius: 4px;">${opts}</select>`;
+      html += `<label>${local}</label><select data-local="${local}">${opts}</select>`;
     });
     grid.innerHTML = html;
-    // 自动匹配
     grid.querySelectorAll('select').forEach(sel => {
       const local = sel.dataset.local;
+      if (currentMap[local]) { sel.value = currentMap[local]; return; }
       const kws = aliases[local] || [local];
       for (const f of feishuFields) {
-        const fname = String(f.name).toLowerCase();
-        if (kws.some(k => fname.includes(k.toLowerCase()))) {
+        if (kws.some(k => f.name.toLowerCase().includes(k.toLowerCase()))) {
           sel.value = f.id;
           break;
         }
@@ -473,101 +399,142 @@
  
   function getMapping() {
     const m = {};
-    $('mappingGrid').querySelectorAll('select').forEach(sel => {
-      const local = sel.dataset.local;
+    document.querySelectorAll('#mappingGrid select').forEach(sel => {
       const fid = sel.value;
-      if (fid && fid !== '__skip__') m[local] = fid;
+      if (fid && fid !== '__skip__') m[sel.dataset.local] = fid;
     });
     return m;
   }
  
-  async function writeToFeishu() {
-    if (!resultData.length) { setStatus('没有可写入的数据，请先上传订单表', 'err'); return; }
-    if (!feishuFields.length) { setStatus('未连接飞书表格，无法写入', 'err'); return; }
- 
+  async function writeOne(orderId) {
+    const o = orders.find(x => x.id === orderId);
+    if (!o || o.status !== 'ready') return;
     const mapping = getMapping();
     if (!Object.keys(mapping).length) { setStatus('请至少映射一个字段', 'err'); return; }
  
-    const btn = $('writeBtn');
-    btn.disabled = true;
-    btn.textContent = '写入中…';
-    setStatus(`准备写入 ${resultData.length} 条记录…`);
- 
+    o.status = 'writing';
+    refreshUI();
     try {
-      const table = await window.bitable.base.getActiveTable();
+      await writeRecords(o.records, mapping);
+      o.status = 'done';
+      setStatus(`✓ 订单 ${o.meta.orderNo} 写入成功（${o.records.length} 条）`, 'ok');
+    } catch (e) {
+      o.status = 'ready';
+      o.errorMsg = '写入失败：' + (e.message || String(e));
+      setStatus('写入失败：' + (e.message || String(e)) + '（F12 查控制台）', 'err');
+      console.error(e);
+    }
+    refreshUI();
+  }
  
-      // 本地字段名 → 索引
-      const idx = {订单编号:0, 款式:1, 品类:2, 颜色:3, 尺码:4, 件数:5, 日期:6};
+  async function writeAll() {
+    const mapping = getMapping();
+    if (!Object.keys(mapping).length) { setStatus('请至少映射一个字段', 'err'); return; }
+    if (orders.some(o => o.status === 'error')) { setStatus('有订单识别失败，请先修复或移除', 'err'); return; }
+    const queue = orders.filter(o => o.status === 'ready');
+    if (!queue.length) { setStatus('没有待写入的订单', 'err'); return; }
  
-      // 预先获取映射的字段对象（推荐方式：用 field.createCell）
-      const fieldObjs = {};
-      for (const [local, fid] of Object.entries(mapping)) {
-        fieldObjs[local] = await table.getField(fid);
+    $('writeAllBtn').disabled = true;
+    let successCount = 0;
+    for (const o of queue) {
+      o.status = 'writing';
+      refreshUI();
+      try {
+        await writeRecords(o.records, mapping);
+        o.status = 'done';
+        successCount++;
+        setStatus(`进度 ${successCount}/${queue.length}：订单 ${o.meta.orderNo} 已写入`);
+      } catch (e) {
+        o.status = 'ready';
+        o.errorMsg = '写入失败：' + (e.message || String(e));
+        console.error(e);
+        setStatus(`✕ 订单 ${o.meta.orderNo} 写入失败（批量已停止）：${e.message || e}`, 'err');
+        refreshUI();
+        $('writeAllBtn').disabled = false;
+        return;
       }
+      refreshUI();
+    }
+    setStatus(`✓ 全部 ${queue.length} 个订单写入成功`, 'ok');
+    $('writeAllBtn').disabled = false;
+  }
  
-      // 构造记录：用 createCell
-      const records = [];
-      for (const row of resultData) {
-        const cells = [];
-        for (const [local, field] of Object.entries(fieldObjs)) {
-          let value = row[idx[local]];
-          // 日期字段需要毫秒时间戳
-          const ftype = await field.getType();
-          if (ftype === 5 && local === '日期') {  // DateTime
-            // 把 "2026-03-18" 转成毫秒
-            const d = new Date(value + 'T00:00:00');
-            if (!isNaN(d.getTime())) value = d.getTime();
-          }
-          try {
-            const cell = await field.createCell(value);
-            cells.push(cell);
-          } catch(e) {
-            // createCell 失败就跳过，继续其他字段
-            console.warn(`字段 ${local} createCell 失败`, e);
-          }
+  async function writeRecords(records, mapping) {
+    const table = await window.bitable.base.getActiveTable();
+    const idx = {订单编号:0, 款式:1, 品类:2, 颜色:3, 尺码:4, 件数:5, 日期:6};
+    const fieldObjs = {};
+    for (const [local, fid] of Object.entries(mapping)) {
+      fieldObjs[local] = await table.getField(fid);
+    }
+    const cellRecords = [];
+    for (const row of records) {
+      const cells = [];
+      for (const [local, field] of Object.entries(fieldObjs)) {
+        let value = row[idx[local]];
+        const ftype = await field.getType();
+        if (ftype === 5 && local === '日期') {
+          const d = new Date(value + 'T00:00:00');
+          if (!isNaN(d.getTime())) value = d.getTime();
         }
-        records.push(cells);
+        try {
+          const cell = await field.createCell(value);
+          cells.push(cell);
+        } catch(e) {
+          console.warn(`字段 ${local} createCell 失败`, e);
+        }
       }
- 
-      // 批量写入
-      const BATCH = 500;
-      let done = 0;
-      for (let i = 0; i < records.length; i += BATCH) {
-        const chunk = records.slice(i, i + BATCH);
-        await table.addRecords(chunk);
-        done += chunk.length;
-        setStatus(`写入中 ${done}/${records.length}…`);
-      }
-      setStatus(`✓ 成功写入 ${records.length} 条记录到飞书表格`, 'ok');
-    } catch(e) {
-      console.error('写入错误：', e);
-      setStatus('写入失败：' + (e.message || String(e)) + '（按 F12 看控制台详情）', 'err');
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = '✨ 一键写入飞书';
+      cellRecords.push(cells);
+    }
+    const BATCH = 500;
+    for (let i = 0; i < cellRecords.length; i += BATCH) {
+      await table.addRecords(cellRecords.slice(i, i + BATCH));
     }
   }
  
-  $('writeBtn').addEventListener('click', writeToFeishu);
-  $('reloadBtn').addEventListener('click', loadFeishuFields);
+  $('writeAllBtn').addEventListener('click', writeAll);
  
-  // SDK 事件绑定
+  function setSdkStatus(msg, type) {
+    const banner = $('sdkBanner');
+    $('sdkStatus').textContent = msg;
+    if (type === 'ok') { banner.style.background = '#e8f6ea'; banner.style.color = '#1a7f3e'; banner.style.border = '1px solid #95d5a6'; }
+    else if (type === 'err') { banner.style.background = '#fff0f0'; banner.style.color = '#c64040'; banner.style.border = '1px solid #ffa7a7'; $('sdkDetails').style.display = 'block'; }
+    else { banner.style.background = '#fff4e5'; banner.style.color = '#8a5a00'; banner.style.border = '1px solid #ffd591'; }
+    if (window.__sdkLog) $('sdkLog').textContent = window.__sdkLog.join('\n');
+  }
+ 
+  async function loadFeishuFields() {
+    setSdkStatus('连接表格中…');
+    try {
+      if (!window.bitable || !window.bitable.base) { setSdkStatus('SDK 未加载', 'err'); return; }
+      const table = await window.bitable.base.getActiveTable();
+      if (!table) { setSdkStatus('未获取到当前表', 'err'); return; }
+      const tableName = await table.getName().catch(()=>'未知');
+      const fields = await table.getFieldMetaList();
+      if (!fields || !fields.length) { setSdkStatus(`表「${tableName}」字段数为 0`, 'err'); return; }
+      feishuFields = fields;
+      setSdkStatus(`✓ 已连接表「${tableName}」，共 ${fields.length} 个字段`, 'ok');
+      refreshUI();
+    } catch(e) {
+      setSdkStatus('连接失败：' + (e.message || String(e)), 'err');
+      console.error(e);
+    }
+  }
+ 
+  $('reloadBtn').addEventListener('click', loadFeishuFields);
   window.addEventListener('sdk-ready', loadFeishuFields);
-  window.addEventListener('sdk-error', () => {
-    setSdkStatus('SDK 加载失败，点"查看详细日志"', 'err');
-  });
+  window.addEventListener('sdk-error', () => setSdkStatus('SDK 加载失败', 'err'));
  
   if (window.__sdkLoaded) loadFeishuFields();
   else if (window.__sdkError) setSdkStatus('SDK 加载失败', 'err');
   else {
-    setSdkStatus('SDK 加载中…（尝试 esm.sh / jsdelivr / unpkg）');
+    setSdkStatus('SDK 加载中…');
     setTimeout(() => {
-      if (!window.bitable && !window.__sdkError) {
-        setSdkStatus('SDK 加载超时', 'err');
-      }
+      if (!window.bitable && !window.__sdkError) setSdkStatus('SDK 加载超时', 'err');
     }, 15000);
   }
+ 
+  function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]); }
 })();
 </script>
 </body>
-</html
+</html>
