@@ -55,9 +55,9 @@
   button.big { font-size: 14px; padding: 8px 20px; }
   button.danger { color: #c64040; border-color: #ffa7a7; }
   button.danger:hover:not(:disabled) { background: #fff0f0; }
- 
+
   #sdkBanner { margin: 0 0 12px; padding: 8px 12px; border-radius: 4px; background: #fff4e5; color: #8a5a00; font-size: 12px; border: 1px solid #ffd591; }
- 
+
   .order-card { background: #fff; border: 1px solid #eef0f2; border-radius: 6px; padding: 12px 14px; margin-bottom: 10px; }
   .order-card.status-ready { border-left: 3px solid #faad14; }
   .order-card.status-error { border-left: 3px solid #c64040; background: #fffafa; }
@@ -83,27 +83,27 @@
   .oc-preview th, .oc-preview td { padding: 3px 6px; border: 1px solid #eef0f2; }
   .oc-preview th { background: #f7f8fa; color: #646a73; font-weight: 400; }
   .oc-preview-wrap { max-height: 200px; overflow: auto; border: 1px solid #eef0f2; border-radius: 4px; }
- 
+
   input[type="text"], select { padding: 4px 8px; border: 1px solid #dee0e3; border-radius: 4px; font-size: 12px; }
   .mapping-grid { display: grid; grid-template-columns: 80px 1fr; gap: 6px 10px; align-items: center; font-size: 12px; }
- 
+
   #batchBar { position: sticky; top: 0; z-index: 10; background: #fff; padding: 10px 14px; border: 1px solid #eef0f2; border-radius: 6px; margin-bottom: 12px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .stats { font-size: 12px; color: #646a73; }
   .stats span { margin-right: 10px; }
   .stats .s-ready { color: #8a5a00; }
   .stats .s-error { color: #c64040; }
   .stats .s-done { color: #1a7f3e; }
- 
+
   #status { padding: 8px 12px; border-radius: 4px; background: #f0f2f5; font-size: 12px; color: #646a73; margin-top: 10px; }
   .status-err { background: #fff0f0 !important; color: #c64040 !important; }
   .status-ok { background: #e8f6ea !important; color: #1a7f3e !important; }
 </style>
 </head>
 <body>
- 
+
 <h1>表格速读</h1>
 <p class="subtitle">批量上传订单表 xlsx，自动识别后逐个写入飞书多维表格</p>
- 
+
 <div id="sdkBanner">
   <strong>飞书连接状态：</strong><span id="sdkStatus">启动中…</span>
   <button id="reloadBtn" style="float: right; font-size: 11px; padding: 2px 8px;">重连</button>
@@ -112,19 +112,19 @@
     <pre id="sdkLog" style="font-size: 10px; white-space: pre-wrap; margin: 6px 0 0;"></pre>
   </details>
 </div>
- 
+
 <div class="card">
   <h2>① 上传订单表（可多选）</h2>
   <div class="hint" style="margin-bottom: 8px;">固定模板：A1 订单标题、B2 款式、J2 日期、D3 起为颜色×尺码矩阵。可一次选多个文件，或分批追加</div>
   <input type="file" id="fileInput" accept=".xlsx,.xls" multiple />
   <button id="clearBtn" style="margin-left: 8px;" class="danger">清空全部</button>
 </div>
- 
+
 <div class="card" id="mappingCard" style="display:none;">
   <h2>② 字段映射（本地 → 飞书）· 所有订单共用</h2>
   <div id="mappingGrid" class="mapping-grid"></div>
 </div>
- 
+
 <div class="card" id="ordersCard" style="display:none;">
   <div id="batchBar">
     <div class="stats" id="stats"></div>
@@ -134,9 +134,9 @@
   </div>
   <div id="ordersList"></div>
 </div>
- 
+
 <div id="status">请上传一个或多个订单表 xlsx 文件</div>
- 
+
 <script>
 (function(){
   let orders = [];
@@ -152,14 +152,14 @@
     '件数': ['件数', '数量', '数', 'qty', 'quantity'],
     '日期': ['日期', '时间', 'date'],
   };
- 
+
   const $ = id => document.getElementById(id);
   const setStatus = (msg, type) => {
     const el = $('status');
     el.textContent = msg;
     el.className = type === 'err' ? 'status-err' : type === 'ok' ? 'status-ok' : '';
   };
- 
+
   $('fileInput').addEventListener('change', async e => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
@@ -167,7 +167,7 @@
     e.target.value = '';
     refreshUI();
   });
- 
+
   $('clearBtn').addEventListener('click', () => {
     if (!orders.length) return;
     if (confirm(`清空全部 ${orders.length} 个订单？（已写入飞书的不会删除）`)) {
@@ -176,7 +176,7 @@
       setStatus('已清空', '');
     }
   });
- 
+
   async function processFile(file) {
     const id = nextId++;
     try {
@@ -195,7 +195,7 @@
       });
     }
   }
- 
+
   function excelDateToStr(serial) {
     if (typeof serial !== 'number' || isNaN(serial)) return String(serial);
     const ms = (serial - 25569) * 86400 * 1000;
@@ -203,7 +203,7 @@
     if (isNaN(d.getTime())) return String(serial);
     return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
   }
- 
+
   function parseOrderTitle(raw) {
     const s = String(raw || '').trim();
     const parts = s.split(/\s*-\s*/);
@@ -216,7 +216,7 @@
     }
     return { category: s.replace(/\s*-\s*/g, ''), seq: '' };
   }
- 
+
   function extractOrder(ws) {
     const getCell = ref => {
       const c = ws[ref];
@@ -229,22 +229,34 @@
     const dateStr = excelDateToStr(dateRaw);
     const { category, seq } = parseOrderTitle(title);
     const orderNo = seq ? `${category}-${seq}` : category;
- 
+
+    // 尺码：从 E 列开始扫描第 3 行，遇到"总件/合计"停止。支持任意数量尺码
     const sizes = [];
-    for (const col of ['E','F','G','H','I','J']) {
+    const colLetter = n => {
+      let s = ''; n = n + 1;
+      while (n > 0) { s = String.fromCharCode(65 + (n-1) % 26) + s; n = Math.floor((n-1)/26); }
+      return s;
+    };
+    // 从 E 列（index=4）开始扫最多 20 列
+    for (let i = 4; i < 24; i++) {
+      const col = colLetter(i);
       const v = getCell(col + '3');
-      if (v) sizes.push({col, size: String(v).trim()});
+      if (v === undefined || v === null || v === '') break;  // 遇空停止
+      const s = String(v).trim();
+      if (/总件|合计|总数|total/i.test(s)) break;  // 遇总件列停止
+      sizes.push({col, size: s});
     }
- 
+
+    // 颜色：从第 4 行向下扫，最多扫 30 行（之前限制 13 行会漏颜色多的订单）
     const colors = [];
-    for (let r = 4; r <= 13; r++) {
+    for (let r = 4; r <= 34; r++) {
       const v = getCell('D' + r);
       if (!v) continue;
       const s = String(v).trim();
-      if (s.includes('码总数') || s.includes('合计') || s.includes('总数')) break;
+      if (/码总数|合计|总数|total/i.test(s)) break;
       colors.push({row: r, color: s});
     }
- 
+
     const records = [];
     for (const {row, color} of colors) {
       for (const {col, size} of sizes) {
@@ -253,7 +265,7 @@
         records.push([orderNo, String(styleNo||''), category, color, size, qty, dateStr]);
       }
     }
- 
+
     const warnings = [];
     let errorMsg = '';
     if (!styleNo) warnings.push('款式号（B2）为空');
@@ -266,13 +278,13 @@
         errorMsg = `展开后件数合计 ${sum}，与总件数 ${totalQty} 不一致`;
       }
     }
- 
+
     return {
       meta: { orderNo, styleNo, category, dateStr, totalQty, colorCount: colors.length, sizeCount: sizes.length },
       records, warnings, errorMsg
     };
   }
- 
+
   function refreshUI() {
     renderStats();
     renderOrders();
@@ -288,7 +300,7 @@
     else if (!hasReady) btn.title = '没有待写入的订单';
     else btn.title = '';
   }
- 
+
   function renderStats() {
     const count = (s) => orders.filter(o => o.status === s).length;
     const ready = count('ready'), err = count('error'), done = count('done'), skip = count('skipped');
@@ -298,7 +310,7 @@
       + (done ? ` · <span class="s-done">已写入 ${done}</span>` : '')
       + (skip ? ` · 已跳过 ${skip}` : '');
   }
- 
+
   function renderOrders() {
     const wrap = $('ordersList');
     wrap.innerHTML = orders.map(renderOrderCard).join('');
@@ -318,7 +330,7 @@
       });
     });
   }
- 
+
   function renderOrderCard(o) {
     const badgeText = {ready:'待写入', error:'识别有误', writing:'写入中…', done:'已写入', skipped:'已跳过'}[o.status];
     const m = o.meta || {};
@@ -330,7 +342,7 @@
     `;
     const warnBlock = o.warnings && o.warnings.length ? `<div class="oc-warn">⚠ ${o.warnings.map(escapeHtml).join('；')}</div>` : '';
     const errBlock = o.errorMsg ? `<div class="oc-err">✕ ${escapeHtml(o.errorMsg)}</div>` : '';
- 
+
     let actions = '';
     if (o.status === 'ready') {
       actions = `<button class="btn-preview">预览</button><button class="btn-write primary">写入飞书</button><button class="btn-skip">跳过</button><button class="btn-remove danger">移除</button>`;
@@ -343,7 +355,7 @@
     } else if (o.status === 'writing') {
       actions = `<span style="color: #1456f0; font-size: 12px;">写入中，请勿关闭…</span>`;
     }
- 
+
     const previewBlock = o.records.length ? `
       <div class="oc-preview">
         <div class="oc-preview-wrap">
@@ -357,7 +369,7 @@
         </div>
       </div>
     ` : '';
- 
+
     return `
       <div class="order-card status-${o.status}" id="order-${o.id}">
         <div class="oc-head">
@@ -372,7 +384,7 @@
       </div>
     `;
   }
- 
+
   function renderMapping() {
     const grid = $('mappingGrid');
     const currentMap = getMapping();
@@ -396,7 +408,7 @@
       }
     });
   }
- 
+
   function getMapping() {
     const m = {};
     document.querySelectorAll('#mappingGrid select').forEach(sel => {
@@ -405,13 +417,13 @@
     });
     return m;
   }
- 
+
   async function writeOne(orderId) {
     const o = orders.find(x => x.id === orderId);
     if (!o || o.status !== 'ready') return;
     const mapping = getMapping();
     if (!Object.keys(mapping).length) { setStatus('请至少映射一个字段', 'err'); return; }
- 
+
     o.status = 'writing';
     refreshUI();
     try {
@@ -426,14 +438,14 @@
     }
     refreshUI();
   }
- 
+
   async function writeAll() {
     const mapping = getMapping();
     if (!Object.keys(mapping).length) { setStatus('请至少映射一个字段', 'err'); return; }
     if (orders.some(o => o.status === 'error')) { setStatus('有订单识别失败，请先修复或移除', 'err'); return; }
     const queue = orders.filter(o => o.status === 'ready');
     if (!queue.length) { setStatus('没有待写入的订单', 'err'); return; }
- 
+
     $('writeAllBtn').disabled = true;
     let successCount = 0;
     for (const o of queue) {
@@ -458,7 +470,7 @@
     setStatus(`✓ 全部 ${queue.length} 个订单写入成功`, 'ok');
     $('writeAllBtn').disabled = false;
   }
- 
+
   async function writeRecords(records, mapping) {
     const table = await window.bitable.base.getActiveTable();
     const idx = {订单编号:0, 款式:1, 品类:2, 颜色:3, 尺码:4, 件数:5, 日期:6};
@@ -490,9 +502,9 @@
       await table.addRecords(cellRecords.slice(i, i + BATCH));
     }
   }
- 
+
   $('writeAllBtn').addEventListener('click', writeAll);
- 
+
   function setSdkStatus(msg, type) {
     const banner = $('sdkBanner');
     $('sdkStatus').textContent = msg;
@@ -501,7 +513,7 @@
     else { banner.style.background = '#fff4e5'; banner.style.color = '#8a5a00'; banner.style.border = '1px solid #ffd591'; }
     if (window.__sdkLog) $('sdkLog').textContent = window.__sdkLog.join('\n');
   }
- 
+
   async function loadFeishuFields() {
     setSdkStatus('连接表格中…');
     try {
@@ -519,11 +531,11 @@
       console.error(e);
     }
   }
- 
+
   $('reloadBtn').addEventListener('click', loadFeishuFields);
   window.addEventListener('sdk-ready', loadFeishuFields);
   window.addEventListener('sdk-error', () => setSdkStatus('SDK 加载失败', 'err'));
- 
+
   if (window.__sdkLoaded) loadFeishuFields();
   else if (window.__sdkError) setSdkStatus('SDK 加载失败', 'err');
   else {
@@ -532,7 +544,7 @@
       if (!window.bitable && !window.__sdkError) setSdkStatus('SDK 加载超时', 'err');
     }, 15000);
   }
- 
+
   function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]); }
 })();
 </script>
