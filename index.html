@@ -257,18 +257,65 @@
     $('tableWrap').innerHTML = html;
   }
  
-  // 复制
+  // 复制（三重降级：navigator.clipboard → execCommand → 手动文本框）
   async function copyToClipboard(includeHeader) {
     const lines = [];
     if (includeHeader) lines.push(headerRow.join('\t'));
     resultData.forEach(r => lines.push(r.join('\t')));
     const text = lines.join('\n');
+ 
+    // 方法 1：现代 API
     try {
       await navigator.clipboard.writeText(text);
       setStatus(`✓ 已复制 ${resultData.length} 条${includeHeader ? '（含表头）' : '（不含表头）'}到剪贴板`, 'ok');
+      return;
     } catch(e) {
-      setStatus('复制失败：' + e.message, 'err');
+      console.warn('clipboard API failed, falling back:', e);
     }
+ 
+    // 方法 2：老式 execCommand
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.top = '-9999px';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      if (ok) {
+        setStatus(`✓ 已复制 ${resultData.length} 条到剪贴板（降级模式）`, 'ok');
+        return;
+      }
+    } catch(e) {
+      console.warn('execCommand failed:', e);
+    }
+ 
+    // 方法 3：手动复制（显示一个可选中的大文本框）
+    showManualCopyBox(text);
+  }
+ 
+  function showManualCopyBox(text) {
+    let box = document.getElementById('manualCopyBox');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'manualCopyBox';
+      box.style.cssText = 'margin-top: 12px; padding: 12px; border: 2px solid #3370ff; border-radius: 4px; background: #fff;';
+      box.innerHTML = `
+        <div style="font-size: 12px; color: #1456f0; margin-bottom: 6px;">
+          <strong>飞书禁用了自动复制，请手动复制：</strong>点击下方文本框 → Ctrl+A 全选 → Ctrl+C 复制 → 去飞书表格粘贴
+        </div>
+        <textarea id="manualCopyText" readonly style="width: 100%; height: 120px; font-family: Menlo, monospace; font-size: 11px; padding: 8px; border: 1px solid #dee0e3; border-radius: 4px;"></textarea>
+      `;
+      $('previewCard').appendChild(box);
+    }
+    const ta = document.getElementById('manualCopyText');
+    ta.value = text;
+    ta.focus();
+    ta.select();
+    setStatus(`自动复制失败，已为你准备好文本，请在下方文本框手动 Ctrl+A 全选后 Ctrl+C 复制`, 'err');
+    box.scrollIntoView({behavior: 'smooth', block: 'center'});
   }
   $('copyBtn').addEventListener('click', () => copyToClipboard(true));
   $('copyNoHeaderBtn').addEventListener('click', () => copyToClipboard(false));
