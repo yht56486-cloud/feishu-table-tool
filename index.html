@@ -487,37 +487,45 @@
     for (const row of records) {
       const fields = {};
       for (const [local, fid] of Object.entries(mapping)) {
-        let value = row[idx[local]];
+        let raw = row[idx[local]];
         const ftype = fieldTypes[local];
+        let value;
 
-        // 数字字段（type=2）：强制转 Number
-        if (ftype === 2) {
-          const n = Number(value);
+        // 字段类型枚举：1=文本, 2=数字, 3=单选, 4=多选, 5=日期, 7=复选, 11=人员, 13=电话, 15=URL, 17=附件, 19=查找, 20=公式, 21=双向关联, 1001=创建时间, 1002=最后修改时间, 1003=创建人, 1004=最后修改人, 1005=自动编号
+        if (ftype === 2) {  // 数字
+          const n = Number(raw);
           if (isNaN(n)) continue;
           value = n;
         }
-        // 日期字段（type=5）：毫秒时间戳
-        else if (ftype === 5 && local === '日期') {
-          const d = new Date(value + 'T00:00:00');
+        else if (ftype === 5 && local === '日期') {  // 日期
+          const d = new Date(raw + 'T00:00:00');
           if (isNaN(d.getTime())) continue;
           value = d.getTime();
         }
-        // 文本字段（type=1）：必须是 segment 数组格式
-        else if (ftype === 1) {
-          value = [{ type: 'text', text: String(value) }];
+        else if (ftype === 3) {  // 单选
+          if (raw === null || raw === undefined || raw === '') continue;
+          value = { text: String(raw) };
         }
-        // 其他字段直接传字符串
-        else {
-          value = String(value);
+        else if (ftype === 4) {  // 多选
+          if (raw === null || raw === undefined || raw === '') continue;
+          value = [{ text: String(raw) }];
+        }
+        else if (ftype === 1) {  // 文本：segment 数组
+          if (raw === null || raw === undefined || raw === '') continue;
+          value = [{ type: 'text', text: String(raw) }];
+        }
+        else {  // 其他：原样字符串
+          if (raw === null || raw === undefined || raw === '') continue;
+          value = String(raw);
         }
 
-        if (value === null || value === undefined || value === '') continue;
         fields[fid] = value;
       }
       recordValues.push({ fields });
     }
 
-    console.log('准备写入', recordValues.length, '条，示例第一条:', recordValues[0]);
+    console.log('字段类型映射:', fieldTypes);
+    console.log('准备写入', recordValues.length, '条，示例第一条:', JSON.stringify(recordValues[0]));
 
     const BATCH = 500;
     for (let i = 0; i < recordValues.length; i += BATCH) {
