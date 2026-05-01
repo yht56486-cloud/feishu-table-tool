@@ -474,32 +474,55 @@
   async function writeRecords(records, mapping) {
     const table = await window.bitable.base.getActiveTable();
     const idx = {订单编号:0, 款式:1, 品类:2, 颜色:3, 尺码:4, 件数:5, 日期:6};
-    const fieldObjs = {};
+
+    // 预先获取每个映射字段的 type
+    const fieldTypes = {};
     for (const [local, fid] of Object.entries(mapping)) {
-      fieldObjs[local] = await table.getField(fid);
+      const field = await table.getField(fid);
+      fieldTypes[local] = await field.getType();
     }
-    const cellRecords = [];
+
+    // 构造 IRecordValue 数组（{ fields: { fieldId: value } }）
+    const recordValues = [];
     for (const row of records) {
-      const cells = [];
-      for (const [local, field] of Object.entries(fieldObjs)) {
+      const fields = {};
+      for (const [local, fid] of Object.entries(mapping)) {
         let value = row[idx[local]];
-        const ftype = await field.getType();
-        if (ftype === 5 && local === '日期') {
+        const ftype = fieldTypes[local];
+
+        // 数字字段（type=2）：强制转 Number
+        if (ftype === 2) {
+          const n = Number(value);
+          if (isNaN(n)) continue;
+          value = n;
+        }
+        // 日期字段（type=5）：毫秒时间戳
+        else if (ftype === 5 && local === '日期') {
           const d = new Date(value + 'T00:00:00');
-          if (!isNaN(d.getTime())) value = d.getTime();
+          if (isNaN(d.getTime())) continue;
+          value = d.getTime();
         }
-        try {
-          const cell = await field.createCell(value);
-          cells.push(cell);
-        } catch(e) {
-          console.warn(`字段 ${local} createCell 失败`, e);
+        // 文本字段（type=1）：必须是 segment 数组格式
+        else if (ftype === 1) {
+          value = [{ type: 'text', text: String(value) }];
         }
+        // 其他字段直接传字符串
+        else {
+          value = String(value);
+        }
+
+        if (value === null || value === undefined || value === '') continue;
+        fields[fid] = value;
       }
-      cellRecords.push(cells);
+      recordValues.push({ fields });
     }
+
+    console.log('准备写入', recordValues.length, '条，示例第一条:', recordValues[0]);
+
     const BATCH = 500;
-    for (let i = 0; i < cellRecords.length; i += BATCH) {
-      await table.addRecords(cellRecords.slice(i, i + BATCH));
+    for (let i = 0; i < recordValues.length; i += BATCH) {
+      const chunk = recordValues.slice(i, i + BATCH);
+      await table.addRecords(chunk);
     }
   }
 
