@@ -17,8 +17,9 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   if (e.request.mode === 'navigate') {
+    // 网络优先：始终拉最新版本，网络失败才用缓存
     e.respondWith(
-      caches.match('./index.html').then(r => r || fetch(e.request))
+      fetch(e.request).catch(() => caches.match('./index.html'))
     );
   }
 });
