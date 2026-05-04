@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>时间记录</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0f0f1a">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    body {
+      background: #0f0f1a;
+      color: #fff;
+      font-family: -apple-system, 'PingFang SC', 'Noto Sans SC', sans-serif;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    .status-text {
+      font-size: 14px;
+      color: rgba(255,255,255,0.45);
+      margin-bottom: 16px;
+      letter-spacing: 0.5px;
+      min-height: 20px;
+    }
+
+    .timer {
+      font-size: 52px;
+      font-weight: 200;
+      letter-spacing: 3px;
+      margin-bottom: 52px;
+      font-variant-numeric: tabular-nums;
+      min-height: 68px;
+      display: flex;
+      align-items: center;
+      color: rgba(255,255,255,0.9);
+    }
+
+    .btn-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 40px;
+    }
+
+    .pulse-ring {
+      position: absolute;
+      width: 200px;
+      height: 200px;
+      border-radius: 50%;
+      background: #e74c3c;
+      opacity: 0;
+    }
+
+    .recording .pulse-ring {
+      animation: pulse 2s ease-out infinite;
+    }
+
+    @keyframes pulse {
+      0%   { transform: scale(0.9); opacity: 0.5; }
+      100% { transform: scale(1.65); opacity: 0; }
+    }
+
+    .main-btn {
+      width: 190px;
+      height: 190px;
+      border-radius: 50%;
+      border: none;
+      background: #4f8ef7;
+      color: #fff;
+      font-size: 18px;
+      font-weight: 500;
+      cursor: pointer;
+      position: relative;
+      z-index: 1;
+      transition: transform 0.12s, background 0.35s, box-shadow 0.35s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      box-shadow: 0 8px 40px rgba(79,142,247,0.45);
+    }
+
+    .recording .main-btn {
+      background: #e74c3c;
+      box-shadow: 0 8px 40px rgba(231,76,60,0.45);
+    }
+
+    .main-btn:active { transform: scale(0.93); }
+
+    .btn-icon { font-size: 30px; line-height: 1; }
+
+    .start-time-label {
+      font-size: 13px;
+      color: rgba(255,255,255,0.4);
+      min-height: 18px;
+    }
+
+    /* 底部弹窗 */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.65);
+      display: flex;
+      align-items: flex-end;
+      z-index: 100;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+
+    .modal-overlay.show {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .modal-sheet {
+      width: 100%;
+      background: #1c1c2e;
+      border-radius: 22px 22px 0 0;
+      padding: 28px 24px 44px;
+      transform: translateY(100%);
+      transition: transform 0.3s cubic-bezier(0.32,0.72,0,1);
+    }
+
+    .modal-overlay.show .modal-sheet { transform: translateY(0); }
+
+    .modal-handle {
+      width: 40px;
+      height: 4px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 2px;
+      margin: 0 auto 24px;
+    }
+
+    .modal-title {
+      font-size: 17px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    .modal-time-range {
+      font-size: 13px;
+      color: rgba(255,255,255,0.45);
+      margin-bottom: 22px;
+    }
+
+    .modal-input {
+      width: 100%;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 14px;
+      padding: 15px 16px;
+      color: #fff;
+      font-size: 16px;
+      outline: none;
+      margin-bottom: 16px;
+      transition: border-color 0.2s;
+    }
+
+    .modal-input::placeholder { color: rgba(255,255,255,0.25); }
+    .modal-input:focus { border-color: #4f8ef7; }
+
+    .modal-btn {
+      width: 100%;
+      height: 54px;
+      border-radius: 16px;
+      border: none;
+      background: #4f8ef7;
+      color: #fff;
+      font-size: 17px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+
+    .modal-btn:active { opacity: 0.82; }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      top: 56px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-8px);
+      background: rgba(28,28,46,0.96);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: #fff;
+      padding: 11px 22px;
+      border-radius: 100px;
+      font-size: 14px;
+      opacity: 0;
+      transition: opacity 0.25s, transform 0.25s;
+      white-space: nowrap;
+      z-index: 200;
+      pointer-events: none;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="status-text" id="statusText">点击开始记录时间</div>
+  <div class="timer" id="timer"></div>
+
+  <div class="btn-wrap" id="btnWrap">
+    <div class="pulse-ring"></div>
+    <button class="main-btn" id="mainBtn" onclick="handleTap()">
+      <span class="btn-icon" id="btnIcon">▶</span>
+      <span id="btnLabel">开始记录</span>
+    </button>
+  </div>
+
+  <div class="start-time-label" id="startTimeLabel"></div>
+
+  <!-- 描述输入弹窗 -->
+  <div class="modal-overlay" id="modal" onclick="onOverlayClick(event)">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-title">这段时间做了什么？</div>
+      <div class="modal-time-range" id="modalTimeRange"></div>
+      <input class="modal-input" id="descInput" type="text"
+             placeholder="例：裁剪96款黑色" maxlength="50"
+             onkeydown="if(event.key==='Enter')confirmStop()">
+      <button class="modal-btn" onclick="confirmStop()">写入日历</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ⚠️ 填入你的 Google OAuth 客户端 ID
+    const CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID_HERE';
+    const SCOPE = 'https://www.googleapis.com/auth/calendar.events';
+
+    let isRecording = false;
+    let startTime = null;
+    let stopTime = null;
+    let timerInterval = null;
+    let tokenClient = null;
+    let accessToken = null;
+    let pendingEvent = null;
+
+    // ── 状态恢复 ──────────────────────────────────────
+    function restoreState() {
+      const saved = localStorage.getItem('tt_start');
+      if (saved) {
+        startTime = new Date(saved);
+        setUI(true);
+        startTimer();
+      }
+    }
+
+    // ── 主按钮点击 ────────────────────────────────────
+    function handleTap() {
+      isRecording ? stopRecording() : startRecording();
+    }
+
+    function startRecording() {
+      startTime = new Date();
+      localStorage.setItem('tt_start', startTime.toISOString());
+      setUI(true);
+      startTimer();
+    }
+
+    function stopRecording() {
+      stopTime = new Date();
+      clearInterval(timerInterval);
+      timerInterval = null;
+      showModal();
+    }
+
+    // ── UI 切换 ───────────────────────────────────────
+    function setUI(recording) {
+      isRecording = recording;
+      const wrap = document.getElementById('btnWrap');
+      wrap.classList.toggle('recording', recording);
+      document.getElementById('btnIcon').textContent  = recording ? '■' : '▶';
+      document.getElementById('btnLabel').textContent = recording ? '结束记录' : '开始记录';
+      document.getElementById('statusText').textContent = recording ? '记录中…' : '点击开始记录时间';
+      document.getElementById('startTimeLabel').textContent = recording
+        ? '开始于 ' + fmt(startTime) : '';
+      if (!recording) document.getElementById('timer').textContent = '';
+    }
+
+    // ── 计时器 ────────────────────────────────────────
+    function startTimer() {
+      function tick() {
+        document.getElementById('timer').textContent = elapsed(Date.now() - startTime);
+      }
+      tick();
+      timerInterval = setInterval(tick, 1000);
+    }
+
+    function elapsed(ms) {
+      const s = Math.floor(ms / 1000);
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const sec = s % 60;
+      if (h > 0) return `${h}:${pad(m)}:${pad(sec)}`;
+      return `${pad(m)}:${pad(sec)}`;
+    }
+
+    // ── 弹窗 ──────────────────────────────────────────
+    function showModal() {
+      document.getElementById('modalTimeRange').textContent =
+        fmt(startTime) + ' — ' + fmt(stopTime);
+      document.getElementById('descInput').value = '';
+      document.getElementById('modal').classList.add('show');
+      setTimeout(() => document.getElementById('descInput').focus(), 360);
+    }
+
+    function hideModal() {
+      document.getElementById('modal').classList.remove('show');
+    }
+
+    function onOverlayClick(e) {
+      if (e.target === document.getElementById('modal')) hideModal();
+    }
+
+    async function confirmStop() {
+      const desc = document.getElementById('descInput').value.trim();
+      if (!desc) { document.getElementById('descInput').focus(); return; }
+
+      hideModal();
+      localStorage.removeItem('tt_start');
+      setUI(false);
+
+      pendingEvent = { summary: desc, start: startTime, end: stopTime };
+      await saveToCalendar();
+    }
+
+    // ── Google 日历 ───────────────────────────────────
+    function ensureTokenClient() {
+      if (tokenClient) return;
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: CLIENT_ID,
+        scope: SCOPE,
+        callback(resp) {
+          if (resp.error) { showToast('授权失败：' + resp.error); return; }
+          accessToken = resp.access_token;
+          saveToCalendar();
+        }
+      });
+    }
+
+    async function saveToCalendar() {
+      if (!pendingEvent) return;
+
+      if (CLIENT_ID === 'YOUR_GOOGLE_CLIENT_ID_HERE') {
+        showToast('⚠️ 请先配置 Google Client ID');
+        return;
+      }
+
+      ensureTokenClient();
+
+      if (!accessToken) {
+        tokenClient.requestAccessToken();
+        return;
+      }
+
+      const { summary, start, end } = pendingEvent;
+      try {
+        const res = await fetch(
+          'https://www.googleapis.com/calendar/v3/calendars/primary/events',
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': 'Bearer ' + accessToken,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              summary,
+              start: { dateTime: start.toISOString() },
+              end:   { dateTime: end.toISOString() }
+            })
+          }
+        );
+
+        if (res.ok) {
+          pendingEvent = null;
+          showToast('✓ 已写入 Google 日历');
+        } else if (res.status === 401) {
+          accessToken = null;
+          tokenClient.requestAccessToken();
+        } else {
+          showToast('写入失败，请重试');
+        }
+      } catch {
+        showToast('网络错误，请检查连接');
+      }
+    }
+
+    // ── 工具函数 ──────────────────────────────────────
+    function fmt(d) {
+      return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function pad(n) { return String(n).padStart(2, '0'); }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    // ── 初始化 ────────────────────────────────────────
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js');
+    }
+
+    restoreState();
+  </script>
+
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</body>
+</html>
