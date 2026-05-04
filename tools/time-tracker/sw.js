@@ -1,4 +1,4 @@
-const CACHE = 'time-tracker-v1';
+const CACHE = 'time-tracker-v2';
 const ASSETS = ['./', './index.html', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', e => {
