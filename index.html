@@ -142,11 +142,11 @@
   let orders = [];
   let nextId = 1;
   let feishuFields = [];
-  const localFields = ['订单编号', '款式', '品类', '颜色', '尺码', '件数', '日期'];
+  const localFields = ['订单编号', '电子版版号', '款式', '颜色', '尺码', '件数', '日期'];
   const aliases = {
     '订单编号': ['订单编号', '订单号', '编号'],
-    '款式': ['款式', '款号', '款式号', '版型'],
-    '品类': ['品类', '品名', '类别', '文本 7', '文本7', '品种'],
+    '电子版版号': ['电子版版号', '版号', '版型', '版型号'],
+    '款式': ['款式', '款式名称', '款号', '品类', '品名', '类别', '文本 7', '文本7', '品种'],
     '颜色': ['颜色', '色'],
     '尺码': ['尺码', '尺寸', 'size'],
     '件数': ['件数', '数量', '数', 'qty', 'quantity'],
@@ -268,7 +268,7 @@
 
     const warnings = [];
     let errorMsg = '';
-    if (!styleNo) warnings.push('款式号（B2）为空');
+    if (!styleNo) warnings.push('版号（B2）为空');
     if (!title) errorMsg = '订单标题（A1）为空';
     else if (!sizes.length) errorMsg = '未识别到尺码表头（E3~J3）';
     else if (!colors.length) errorMsg = '未识别到颜色行（D4 向下）';
@@ -336,7 +336,7 @@
     const m = o.meta || {};
     const metaLine = o.status === 'error' && !m.orderNo ? '' : `
       <div class="oc-meta">
-        <strong>${escapeHtml(m.orderNo || '-')}</strong> · 款式 ${escapeHtml(String(m.styleNo || '-'))} · 品类 ${escapeHtml(m.category || '-')} · 日期 ${escapeHtml(m.dateStr || '-')}<br>
+        <strong>${escapeHtml(m.orderNo || '-')}</strong> · 版号 ${escapeHtml(String(m.styleNo || '-'))} · 款式 ${escapeHtml(m.category || '-')} · 日期 ${escapeHtml(m.dateStr || '-')}<br>
         ${m.colorCount || 0} 色 × ${m.sizeCount || 0} 码 = <strong>${o.records.length} 条</strong>，合计 <strong>${m.totalQty || 0}</strong> 件
       </div>
     `;
@@ -360,7 +360,7 @@
       <div class="oc-preview">
         <div class="oc-preview-wrap">
           <table>
-            <thead><tr>${['订单编号','款式','品类','颜色','尺码','件数','日期'].map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+            <thead><tr>${['订单编号','电子版版号','款式','颜色','尺码','件数','日期'].map(h=>`<th>${h}</th>`).join('')}</tr></thead>
             <tbody>
               ${o.records.slice(0, 50).map(r => `<tr>${r.map(v=>`<td>${escapeHtml(String(v))}</td>`).join('')}</tr>`).join('')}
               ${o.records.length > 50 ? `<tr><td colspan="7" style="text-align:center;color:#8f959e;">… 还有 ${o.records.length-50} 条</td></tr>` : ''}
@@ -473,7 +473,7 @@
 
   async function writeRecords(records, mapping) {
     const table = await window.bitable.base.getActiveTable();
-    const idx = {订单编号:0, 款式:1, 品类:2, 颜色:3, 尺码:4, 件数:5, 日期:6};
+    const idx = {订单编号:0, 电子版版号:1, 款式:2, 颜色:3, 尺码:4, 件数:5, 日期:6};
 
     // 预先获取每个映射字段的对象和类型
     const fieldList = [];
